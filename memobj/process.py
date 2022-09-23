@@ -1,4 +1,5 @@
 import ctypes
+import sys
 from typing import Self
 
 
@@ -6,7 +7,7 @@ class Process:
     """A connected process"""
 
     @classmethod
-    def from_name(cls) -> Self:
+    def from_name(cls, name: str) -> Self:
         raise NotImplementedError()
 
     @classmethod
@@ -66,6 +67,7 @@ class WindowsProcess(Process):
     def __init__(self, process_handle: int):
         self.process_handle = process_handle
 
+    # noinspection PyPep8Naming
     @staticmethod
     def _get_debug_privileges():
         import ctypes.wintypes
@@ -125,7 +127,7 @@ class WindowsProcess(Process):
             )
 
             if lookup_privilege_success == 0:
-                raise RuntimeError("LookupPriviledgeValue failed")
+                raise RuntimeError("LookupPrivilegeValue failed")
 
         with CheckWindowsOsError():
             new_privilege = LUID_AND_ATTRIBUTES()
@@ -150,14 +152,69 @@ class WindowsProcess(Process):
                 raise RuntimeError("AdjustTokenPrivileges failed")
 
     @classmethod
-    def from_name(cls) -> Self:
-        pass
+    def from_name(cls, name: str, *, require_debug: bool = True) -> Self:
+        import ctypes.wintypes
+
+        # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-processentry32
+        class PROCESSENTRY32(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", ctypes.wintypes.DWORD),
+                ("cntUsage", ctypes.wintypes.DWORD),
+                ("th32ProcessID", ctypes.wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+                ("th32ModuleID", ctypes.wintypes.DWORD),
+                ("cntThreads", ctypes.wintypes.DWORD),
+                ("th32ParentProcessID", ctypes.wintypes.DWORD),
+                ("pcPriClassBase", ctypes.c_long),
+                ("dwFlags", ctypes.wintypes.DWORD),
+                ("szExeFile", ctypes.c_char * ctypes.wintypes.MAX_PATH)
+            ]
+
+        with CheckWindowsOsError():
+            # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot
+            snapshot = ctypes.windll.kernel32.CreateToolhelp32Snapshot(
+                0x2,
+                0,
+            )
+
+            # https://referencesource.microsoft.com/#mscorlib/microsoft/win32/win32native.cs,1196
+            # if that link is dead the content was
+            # internal static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
+            # INVALID_HANDLE_VALUE is -1
+            if snapshot == -1:
+                raise RuntimeError("CreateToolhelp32Snapshot failed")
+
+        with CheckWindowsOsError():
+            # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-process32first
+            # this is really quite a silly way to do this
+            process_entry = PROCESSENTRY32()
+            # see PROCESSENTRY32.dwSize note for why this has to be set
+            process_entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
+            process_32_success = ctypes.windll.kernel32.Process32First(
+                snapshot,
+                ctypes.byref(process_entry)
+            )
+
+            if process_32_success == 0:
+                raise RuntimeError("Process32First failed")
+
+        while process_32_success:
+            if process_entry.szExeFile.decode() == name:
+                return cls.from_id(process_entry.th32ProcessID, require_debug=require_debug)
+            process_32_success = ctypes.windll.kernel32.Process32Next(
+                snapshot,
+                ctypes.byref(process_entry)
+            )
+
+        raise ValueError(f"No processes found named {name}; make sure you included the .exe and any capital letters")
 
     @classmethod
     def from_id(cls, pid: int, *, require_debug: bool = True) -> Self:
         try:
             cls._get_debug_privileges()
         except OSError as error:
+            # 1300 is ERROR_NOT_ALL_ASSIGNED which is raised when the calling process doesn't have the
+            # privilege on it's token
             if error.errno == 1300 and require_debug:
                 raise RuntimeError("Could not get debug permission; try running as admin or pass require_debug=False")
 
@@ -182,5 +239,26 @@ class WindowsProcess(Process):
         pass
 
 
+def from_name(name: str) -> Process:
+    match sys.platform:
+        case "win32":
+            return WindowsProcess.from_name(name)
+        case "linux":
+            raise NotImplementedError()
+        case _:
+            raise NotImplementedError(f"{sys.platform} has not been implemented")
+
+
+# TODO: how to handle WindowsProcess's require_debug; *, windows_require_debug?
+def from_id(pid: int) -> Process:
+    match sys.platform:
+        case "win32":
+            return WindowsProcess.from_id(pid)
+        case "linux":
+            raise NotImplementedError()
+        case _:
+            raise NotImplementedError(f"{sys.platform} has not been implemented")
+
+
 if __name__ == "__main__":
-    process = WindowsProcess.from_id(980, require_debug=True)
+    process = WindowsProcess.from_name("Notepad.exe", require_debug=False)
