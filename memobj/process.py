@@ -49,18 +49,7 @@ class CheckWindowsOsError:
         last_error = ctypes.windll.kernel32.GetLastError()
 
         if last_error != 0:
-            # https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessage
-            buffer = ctypes.create_unicode_buffer(500)
-            ctypes.windll.kernel32.FormatMessageW(
-                0x1000 | 0x200,
-                0,
-                last_error,
-                0,
-                ctypes.byref(buffer),
-                500,
-            )
-            error_message = buffer.value.strip("\r\n")
-            raise OSError(last_error, error_message)
+            raise ctypes.WinError(last_error)
 
 
 class WindowsProcess(Process):
