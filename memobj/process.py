@@ -222,10 +222,35 @@ class WindowsProcess(Process):
         return cls(process_handle)
 
     def read_memory(self, address: int, size: int) -> bytes:
-        pass
+        with CheckWindowsOsError():
+            byte_buffer = ctypes.create_string_buffer(size)
+            # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-readprocessmemory
+            success = ctypes.windll.kernel32.ReadProcessMemory(
+                self.process_handle,
+                ctypes.c_void_p(address),
+                ctypes.byref(byte_buffer),
+                size,
+                0,
+            )
+
+            if success == 0:
+                raise ValueError(f"ReadProcessMemory failed for address {address} with size {size}")
+
+        return byte_buffer.raw
 
     def write_memory(self, address: int, value: bytes):
-        pass
+        with CheckWindowsOsError():
+            # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory
+            success = ctypes.windll.kernel32.WriteProcessMemory(
+                self.process_handle,
+                ctypes.c_void_p(address),
+                value,
+                len(value),
+                0,
+            )
+
+            if success == 0:
+                raise ValueError(f"WriteProcessMemory failed for address {address} with bytes {value}")
 
 
 def from_name(name: str) -> Process:
@@ -249,5 +274,10 @@ def from_id(pid: int) -> Process:
             raise NotImplementedError(f"{sys.platform} has not been implemented")
 
 
+# TODO: remove after prototyping
 if __name__ == "__main__":
-    process = WindowsProcess.from_name("Notepad.exe", require_debug=False)
+    # process = WindowsProcess.from_name("Notepad.exe", require_debug=True)
+    process = from_name("Notepad.exe")
+    # data = process.read_memory(0x1D1C0A4173C, 4)
+    # print(data)
+    # process.write_memory(0x1D1C0A4173C, b"\x46\x01")
