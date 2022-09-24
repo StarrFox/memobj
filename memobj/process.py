@@ -1,6 +1,7 @@
 import ctypes
+import struct
 import sys
-from typing import Self
+from typing import Self, Any
 
 
 class Process:
@@ -8,10 +9,28 @@ class Process:
 
     @classmethod
     def from_name(cls, name: str) -> Self:
+        """
+        Open a process by name
+
+        Args:
+            name: The name of the process to open
+
+        Returns:
+        The opened process
+        """
         raise NotImplementedError()
 
     @classmethod
     def from_id(cls, pid: int) -> Self:
+        """
+        Open a process by id
+
+        Args:
+            pid: The id of the process to open
+
+        Returns:
+        The opened process
+        """
         raise NotImplementedError()
 
     def read_memory(self, address: int, size: int) -> bytes:
@@ -36,6 +55,39 @@ class Process:
             value: The bytes to write to that address
         """
         raise NotImplementedError()
+
+    def read_formatted(self, address: int, format_string: str) -> tuple[Any] | Any:
+        """
+        Read formatted bytes from memory, format_string is passed directly to struct.unpack
+
+        Args:
+            address: The address to read from
+            format_string: The format string to pass to struct.unpack
+
+        Returns:
+        The formatted data (the corresponding python type/tuple of)
+        """
+        raw_data = self.read_memory(address, struct.calcsize(format_string))
+
+        # struct.unpack is actually faster than int.from_data for some reason
+        formatted = struct.unpack(format_string, raw_data)
+
+        if len(formatted) == 1:
+            return formatted[0]
+
+        return formatted
+
+    def write_formatted(self, address: int, format_string: str, value: tuple[Any] | Any):
+        """
+        Write formatted bytes to memory, format_string is passed directly to struct.pack
+
+        Args:
+            address: The address to write to
+            format_string: The format string to pass to struct.pack
+            value: The data to pass to struct.pack
+        """
+        packed_data = struct.pack(format_string, value)
+        self.write_memory(address, packed_data)
 
 
 class CheckWindowsOsError:
@@ -281,3 +333,4 @@ if __name__ == "__main__":
     # data = process.read_memory(0x1D1C0A4173C, 4)
     # print(data)
     # process.write_memory(0x1D1C0A4173C, b"\x46\x01")
+    print(process.read_formatted(0x1D1C0A4173C, "<i"))
