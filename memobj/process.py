@@ -106,7 +106,8 @@ class CheckWindowsOsError:
 
 class WindowsProcess(Process):
     def __init__(self, process_handle: int):
-        self.process_handle = process_handle
+        # this is private because LinuxProcess doesn't have it
+        self._process_handle = process_handle
 
     # noinspection PyPep8Naming
     @staticmethod
@@ -278,7 +279,7 @@ class WindowsProcess(Process):
             byte_buffer = ctypes.create_string_buffer(size)
             # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-readprocessmemory
             success = ctypes.windll.kernel32.ReadProcessMemory(
-                self.process_handle,
+                self._process_handle,
                 ctypes.c_void_p(address),
                 ctypes.byref(byte_buffer),
                 size,
@@ -294,7 +295,7 @@ class WindowsProcess(Process):
         with CheckWindowsOsError():
             # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory
             success = ctypes.windll.kernel32.WriteProcessMemory(
-                self.process_handle,
+                self._process_handle,
                 ctypes.c_void_p(address),
                 value,
                 len(value),
@@ -305,21 +306,23 @@ class WindowsProcess(Process):
                 raise ValueError(f"WriteProcessMemory failed for address {address} with bytes {value}")
 
 
-def from_name(name: str) -> Process:
+def from_name(name: str, *, windows_require_debug: bool = True) -> Process:
     match sys.platform:
         case "win32":
-            return WindowsProcess.from_name(name)
+            return WindowsProcess.from_name(name, require_debug=windows_require_debug)
         case "linux":
             raise NotImplementedError()
         case _:
             raise NotImplementedError(f"{sys.platform} has not been implemented")
 
 
+# TODO: do these generalized methods work when some kwarg args are platform dependant i.e.
+#  WindowsProcess's require_debug; perhaps Process.windows_specific.process_handle, Process.linux_specific?
 # TODO: how to handle WindowsProcess's require_debug; *, windows_require_debug?
-def from_id(pid: int) -> Process:
+def from_id(pid: int, *, windows_require_debug: bool = True) -> Process:
     match sys.platform:
         case "win32":
-            return WindowsProcess.from_id(pid)
+            return WindowsProcess.from_id(pid, require_debug=windows_require_debug)
         case "linux":
             raise NotImplementedError()
         case _:
