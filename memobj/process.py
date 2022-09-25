@@ -3,9 +3,34 @@ import struct
 import sys
 from typing import Self, Any
 
+# faster than builtin re
+import regex
+
 
 class Process:
     """A connected process"""
+
+    @property
+    def process_64_bit(self) -> bool:
+        """
+        If this process is 64 bit
+        """
+        raise NotImplementedError()
+
+    @property
+    def python_64_bit(self) -> bool:
+        """
+        If the current python is 64 bit
+        """
+        # we can just check the pointer size; 4 = 32, 8 = 64
+        return ctypes.sizeof(ctypes.c_void_p) == 8
+
+    @property
+    def system_64_bit(self) -> bool:
+        """
+        If the system is 64 bit
+        """
+        return sys.maxsize == (2 ** 63) - 1
 
     @classmethod
     def from_name(cls, name: str) -> Self:
@@ -33,6 +58,8 @@ class Process:
         """
         raise NotImplementedError()
 
+    # TODO: allocate and free; can you do that on linux?
+
     def read_memory(self, address: int, size: int) -> bytes:
         """
         Read bytes from memory
@@ -53,6 +80,19 @@ class Process:
         Args:
             address: The address to write to
             value: The bytes to write to that address
+        """
+        raise NotImplementedError()
+
+    def scan_memory(self, pattern: regex.Pattern | bytes, *, module_name: str = None) -> list[int]:
+        """
+        Scan memory for a regex pattern
+
+        Args:
+            pattern: A regex.Pattern or a byte pattern
+            module_name: Name of a module to exclusively search
+
+        Returns:
+        A list of addresses that matched
         """
         raise NotImplementedError()
 
@@ -89,6 +129,8 @@ class Process:
         packed_data = struct.pack(format_string, value)
         self.write_memory(address, packed_data)
 
+    # TODO: scan_formatted? scan_formatted(format_string, value)
+
 
 class CheckWindowsOsError:
     def __enter__(self):
@@ -107,7 +149,7 @@ class CheckWindowsOsError:
 class WindowsProcess(Process):
     def __init__(self, process_handle: int):
         # this is private because LinuxProcess doesn't have it
-        self._process_handle = process_handle
+        self.process_handle = process_handle
 
     # noinspection PyPep8Naming
     @staticmethod
@@ -192,6 +234,26 @@ class WindowsProcess(Process):
 
             if adjust_token_success == 0:
                 raise RuntimeError("AdjustTokenPrivileges failed")
+
+    @property
+    def process_64_bit(self) -> bool:
+        # True  = system 64 bit process 32 bit
+        # False = system 32 bit process 32 bit
+        # False = system ARM    process 32 bit
+        # False = system 64 bit process 64 bit
+        with CheckWindowsOsError():
+            wow_64_process = ctypes.c_bool()
+            # https://learn.microsoft.com/en-us/windows/win32/api/wow64apiset/nf-wow64apiset-iswow64process
+            success = ctypes.windll.kernel32.IsWow64Process(
+                self.process_handle,
+                ctypes.byref(wow_64_process),
+            )
+
+            if success == 0:
+                raise ValueError("IsWow64Process failed")
+
+        # this is the only case where the process is 64 bit
+        return self.system_64_bit and wow_64_process.value == 0
 
     @classmethod
     def from_name(cls, name: str, *, require_debug: bool = True) -> Self:
@@ -279,7 +341,7 @@ class WindowsProcess(Process):
             byte_buffer = ctypes.create_string_buffer(size)
             # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-readprocessmemory
             success = ctypes.windll.kernel32.ReadProcessMemory(
-                self._process_handle,
+                self.process_handle,
                 ctypes.c_void_p(address),
                 ctypes.byref(byte_buffer),
                 size,
@@ -295,7 +357,7 @@ class WindowsProcess(Process):
         with CheckWindowsOsError():
             # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory
             success = ctypes.windll.kernel32.WriteProcessMemory(
-                self._process_handle,
+                self.process_handle,
                 ctypes.c_void_p(address),
                 value,
                 len(value),
@@ -305,35 +367,16 @@ class WindowsProcess(Process):
             if success == 0:
                 raise ValueError(f"WriteProcessMemory failed for address {address} with bytes {value}")
 
-
-def from_name(name: str, *, windows_require_debug: bool = True) -> Process:
-    match sys.platform:
-        case "win32":
-            return WindowsProcess.from_name(name, require_debug=windows_require_debug)
-        case "linux":
-            raise NotImplementedError()
-        case _:
-            raise NotImplementedError(f"{sys.platform} has not been implemented")
-
-
-# TODO: do these generalized methods work when some kwarg args are platform dependant i.e.
-#  WindowsProcess's require_debug; perhaps Process.windows_specific.process_handle, Process.linux_specific?
-# TODO: how to handle WindowsProcess's require_debug; *, windows_require_debug?
-def from_id(pid: int, *, windows_require_debug: bool = True) -> Process:
-    match sys.platform:
-        case "win32":
-            return WindowsProcess.from_id(pid, require_debug=windows_require_debug)
-        case "linux":
-            raise NotImplementedError()
-        case _:
-            raise NotImplementedError(f"{sys.platform} has not been implemented")
+    def scan_memory(self, pattern: regex.Pattern | bytes, *, module_name: str = None) -> list[int]:
+        pass
 
 
 # TODO: remove after prototyping
 if __name__ == "__main__":
     # process = WindowsProcess.from_name("Notepad.exe", require_debug=True)
-    process = from_name("Notepad.exe")
+    process = WindowsProcess.from_name("Notepad.exe")
+    print(f"{process.process_64_bit=} {process.python_64_bit=} {process.system_64_bit=}")
     # data = process.read_memory(0x1D1C0A4173C, 4)
     # print(data)
     # process.write_memory(0x1D1C0A4173C, b"\x46\x01")
-    print(process.read_formatted(0x1D1C0A4173C, "<i"))
+    # print(process.read_formatted(0x1D1C0A4173C, "<i"))
