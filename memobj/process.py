@@ -1,4 +1,8 @@
 import ctypes
+# these types are cross-platform
+import ctypes.wintypes
+import enum
+import functools
 import struct
 import sys
 from typing import Self, Any
@@ -146,16 +150,70 @@ class CheckWindowsOsError:
             raise ctypes.WinError(last_error)
 
 
+# https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-memory_basic_information
+class WindowsMemoryBasicInformation(ctypes.Structure):
+    # TODO: do they mean the debugger should use this type if it's 32 bit or if the process is?
+    #  probably process based
+    # just some casual trolling by windows
+    # see https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-memory_basic_information#remarks
+    if ctypes.sizeof(ctypes.c_void_p) == 8:
+        _fields_ = [
+            ("BaseAddress", ctypes.c_ulonglong),
+            ("AllocationBase", ctypes.c_ulonglong),
+            ("AllocationProtect", ctypes.wintypes.DWORD),
+            ("_alignment1", ctypes.wintypes.DWORD),
+            ("RegionSize", ctypes.c_ulonglong),
+            ("State", ctypes.wintypes.DWORD),
+            ("Protect", ctypes.wintypes.DWORD),
+            ("Type", ctypes.wintypes.DWORD),
+            ("_alignment2", ctypes.wintypes.DWORD),
+        ]
+    else:
+        _fields_ = [
+            ("BaseAddress", ctypes.wintypes.DWORD),
+            ("AllocationBase", ctypes.wintypes.DWORD),
+            ("AllocationProtect", ctypes.wintypes.DWORD),
+            ("RegionSize", ctypes.wintypes.DWORD),
+            ("State", ctypes.wintypes.DWORD),
+            ("Protect", ctypes.wintypes.DWORD),
+            ("Type", ctypes.wintypes.DWORD),
+        ]
+
+
+# https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants
+class WindowsMemoryProtection(enum.IntFlag):
+    # note: can't read
+    PAGE_NOACCESS = 0x1
+    # note: can't write
+    PAGE_READONLY = 0x2
+    PAGE_READWRITE = 0x4
+    # note: wacky on write
+    PAGE_WRITECOPY = 0x8
+    # note: can't write, can read?
+    PAGE_EXECUTE = 0x10
+    # note: can't write
+    PAGE_EXECUTE_READ = 0x20
+    PAGE_EXECUTE_READWRITE = 0x40
+    # note: does wacky stuff on write
+    PAGE_EXECUTE_WRITECOPY = 0x80
+    # note: can't read
+    PAGE_GUARD = 0x100
+    # note: what does non-cachable mean
+    PAGE_NOCACHE = 0x200
+    # note: what is this
+    PAGE_WRITECOMBINE = 0x400
+    # note: what if CFG info
+    PAGE_TARGETS_INVALID = 0x40000000
+    PAGE_TARGETS_NO_UPDATE = 0x40000000
+
+
 class WindowsProcess(Process):
     def __init__(self, process_handle: int):
-        # this is private because LinuxProcess doesn't have it
         self.process_handle = process_handle
 
     # noinspection PyPep8Naming
     @staticmethod
     def _get_debug_privileges():
-        import ctypes.wintypes
-
         # https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-luid
         class LUID(ctypes.Structure):
             _fields_ = [
@@ -235,7 +293,7 @@ class WindowsProcess(Process):
             if adjust_token_success == 0:
                 raise RuntimeError("AdjustTokenPrivileges failed")
 
-    @property
+    @functools.cached_property
     def process_64_bit(self) -> bool:
         # True  = system 64 bit process 32 bit
         # False = system 32 bit process 32 bit
@@ -338,7 +396,8 @@ class WindowsProcess(Process):
 
     def read_memory(self, address: int, size: int) -> bytes:
         with CheckWindowsOsError():
-            byte_buffer = ctypes.create_string_buffer(size)
+            buffer_type = ctypes.c_char * size
+            byte_buffer = buffer_type()
             # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-readprocessmemory
             success = ctypes.windll.kernel32.ReadProcessMemory(
                 self.process_handle,
@@ -368,14 +427,87 @@ class WindowsProcess(Process):
                 raise ValueError(f"WriteProcessMemory failed for address {address} with bytes {value}")
 
     def scan_memory(self, pattern: regex.Pattern | bytes, *, module_name: str = None) -> list[int]:
-        pass
+        region_start = 0
+
+        if self.process_64_bit:
+            max_size = 0x7FFFFFFF0000
+        else:
+            max_size = 0x7FFF0000
+
+        matches = []
+        while region_start < max_size:
+            region_info = self.virtual_query(region_start)
+            region_start = region_info.BaseAddress + region_info.RegionSize
+
+            if region_info.State != 0x1000:
+                continue
+
+            # TODO: is this actually faster
+            try:
+                region_data = self.read_memory(region_info.BaseAddress, region_info.RegionSize)
+            except OSError:
+                continue
+
+            for match in regex.finditer(pattern, region_data, regex.DOTALL):
+                matches.append(region_info.BaseAddress + match.span()[0])
+
+        return matches
+
+    # note: platform dependent
+    def virtual_query(self, address: int = 0) -> WindowsMemoryBasicInformation:
+        """
+        Get information about a memory region in the process
+
+        see https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualqueryex for
+        more information
+
+        Args:
+            address: The base address of the page region, passing 0 (the default)
+            gives info on the first region.
+
+        Returns:
+        A WindowsMemoryBasicInformation about the region
+        """
+        with CheckWindowsOsError():
+            memory_basic_information = WindowsMemoryBasicInformation()
+
+            # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualqueryex
+            returned_bytes = ctypes.windll.kernel32.VirtualQueryEx(
+                self.process_handle,
+                ctypes.c_void_p(address),
+                ctypes.byref(memory_basic_information),
+                ctypes.sizeof(memory_basic_information),
+            )
+
+            # 0 returned bytes = failure
+            if returned_bytes == 0:
+                raise ValueError(f"VirtualQueryEx failed for address {address}")
+
+        return memory_basic_information
 
 
 # TODO: remove after prototyping
 if __name__ == "__main__":
     # process = WindowsProcess.from_name("Notepad.exe", require_debug=True)
-    process = WindowsProcess.from_name("Notepad.exe")
+    #process = WindowsProcess.from_name("Notepad.exe")
+    process = WindowsProcess.from_name("WizardGraphicalClient.exe")
     print(f"{process.process_64_bit=} {process.python_64_bit=} {process.system_64_bit=}")
+    apattern = rb".........\xF3\x0F\x11\x45\xE0.........\xF3\x0F\x11\x4D\xE4.........\xF3\x0F\x11\x45\xE8\x48"
+    results = process.scan_memory(apattern)
+    print(f"{len(results)=} {process.read_memory(results[0], len(apattern))}")
+
+    # region_info = process.virtual_query(2498559078400)
+    #
+    # for name, _ in region_info._fields_:
+    #     print(f"\t{name}={getattr(region_info, name)}")
+    #
+    # print("next")
+    #
+    # region_info = process.virtual_query(0)
+    #
+    # for name, _ in region_info._fields_:
+    #     print(f"\t{name}={getattr(region_info, name)}")
+
     # data = process.read_memory(0x1D1C0A4173C, 4)
     # print(data)
     # process.write_memory(0x1D1C0A4173C, b"\x46\x01")
