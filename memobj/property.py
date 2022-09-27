@@ -25,27 +25,6 @@ class MemoryProperty:
         raise NotImplementedError()
 
 
-class SimpleDataProperty(MemoryProperty):
-    format_string: str = None
-
-    def __init__(self, offset: int | None, *, endianness: str = "little"):
-        super().__init__(offset)
-        self._endianness = endianness
-
-    @property
-    def endianness(self) -> str:
-        if self._endianness == "little":
-            return "<"
-
-        return ">"
-
-    def from_memory(self) -> Any:
-        return self.read_formatted_from_offset(self.endianness + self.format_string)
-
-    def to_memory(self, value: Any):
-        self.write_formatted_to_offset(self.endianness + self.format_string, value)
-
-
 class ObjectPointer(MemoryProperty):
     def __init__(
             self,
@@ -83,6 +62,27 @@ class ObjectPointer(MemoryProperty):
 
     def to_memory(self, value: Any):
         raise NotImplementedError()
+
+
+class SimpleDataProperty(MemoryProperty):
+    format_string: str = None
+
+    def __init__(self, offset: int | None, *, endianness: str = "little"):
+        super().__init__(offset)
+        self._endianness = endianness
+
+    @property
+    def endianness(self) -> str:
+        if self._endianness == "little":
+            return "<"
+
+        return ">"
+
+    def from_memory(self) -> Any:
+        return self.read_formatted_from_offset(self.endianness + self.format_string)
+
+    def to_memory(self, value: Any):
+        self.write_formatted_to_offset(self.endianness + self.format_string, value)
 
 
 class Bool(SimpleDataProperty):
