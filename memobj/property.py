@@ -1,14 +1,21 @@
-from typing import TYPE_CHECKING, Optional, Any
+import inspect
+from typing import TYPE_CHECKING, Optional, Any, Union
 
 
 if TYPE_CHECKING:
     from memobj.object import MemoryObject
+    from memobj.process import Process, WindowsProcess
 
 
-class MemoryProperty:
+class MemoryProperty(property):
     def __init__(self, offset: int | None):
+        super().__init__(self._get_prelude, self._set_prelude)
         self.offset: int | None = offset
         self.memory_object: Optional["MemoryObject"] = None
+
+    @property
+    def process(self) -> Union["Process", "WindowsProcess"]:
+        return self.memory_object.memobj_process
 
     def read_formatted_from_offset(self, format_string: str) -> tuple[Any] | Any:
         offset_address = self.memory_object.base_address + self.offset
@@ -17,6 +24,14 @@ class MemoryProperty:
     def write_formatted_to_offset(self, format_string: str, value: tuple[Any] | Any):
         offset_address = self.memory_object.base_address + self.offset
         self.memory_object.memobj_process.write_formatted(offset_address, format_string, value)
+
+    def _get_prelude(self, memory_object):
+        self.memory_object = memory_object
+        return self.from_memory()
+
+    def _set_prelude(self, memory_object, value):
+        self.memory_object = memory_object
+        self.to_memory(value)
 
     def from_memory(self) -> Any:
         raise NotImplementedError()
@@ -29,13 +44,42 @@ class ObjectPointer(MemoryProperty):
     def __init__(
             self,
             offset: int | None,
-            object_type: Optional[type["MemoryObject"]] = None,
+            object_type: Optional[Union[type["MemoryObject"], str]] = None,
             *,
             endianness: str = "little",
     ):
         super().__init__(offset)
         self.object_type = object_type
         self._endianness = endianness
+
+    def _get_prelude(self, memory_object):
+        self.memory_object = memory_object
+
+        if isinstance(self.object_type, str):
+            module = memory_object.__module__
+
+            if __name__ == module:
+                globals_ = globals()
+
+            elif module == "__main__":
+                globals_ = inspect.stack()[-1].frame.f_globals
+
+            else:
+                for frame_info in inspect.stack():
+                    if frame_info.filename == module:
+                        globals_ = frame_info.frame.f_globals
+                        break
+                else:
+                    raise ValueError(f"Couldn't find frame for type {self.object_type}")
+
+            typed_object_type = globals_.get(self.object_type)
+
+            if typed_object_type is None:
+                raise ValueError(f"{self.object_type} not found in scope of object")
+
+            self.object_type = typed_object_type
+
+        return self.from_memory()
 
     @property
     def endianness(self) -> str:
