@@ -1,2 +1,3 @@
-from .process import from_id, from_name
-from . import process
+from .process import Process, WindowsProcess
+from .property import *
+from .object import MemoryObject
