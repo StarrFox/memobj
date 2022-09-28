@@ -1,4 +1,5 @@
 import inspect
+from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Any, Union
 
 
@@ -16,6 +17,13 @@ class MemoryProperty(property):
     @property
     def process(self) -> Union["Process", "WindowsProcess"]:
         return self.memory_object.memobj_process
+
+    @cached_property
+    def pointer_format_string(self) -> str:
+        if self.memory_object.memobj_process.process_64_bit:
+            return "Q"
+        else:
+            return "I"
 
     def read_formatted_from_offset(self, format_string: str) -> tuple[Any] | Any:
         offset_address = self.memory_object.base_address + self.offset
@@ -89,12 +97,7 @@ class ObjectPointer(MemoryProperty):
         return ">"
 
     def from_memory(self) -> Any:
-        if self.memory_object.memobj_process.process_64_bit:
-            format_string = "Q"
-        else:
-            format_string = "I"
-
-        pointer = self.read_formatted_from_offset(self.endianness + format_string)
+        pointer = self.read_formatted_from_offset(self.endianness + self.pointer_format_string)
 
         if pointer == 0:
             return None
@@ -105,12 +108,7 @@ class ObjectPointer(MemoryProperty):
         return self.object_type(pointer, self.memory_object.memobj_process)
 
     def to_memory(self, value: "MemoryObject"):
-        if self.memory_object.memobj_process.process_64_bit:
-            format_string = "Q"
-        else:
-            format_string = "I"
-
-        self.write_formatted_to_offset(format_string, value.base_address)
+        self.write_formatted_to_offset(self.pointer_format_string, value.base_address)
 
 
 class NullTerminatedString(MemoryProperty):
@@ -123,12 +121,7 @@ class NullTerminatedString(MemoryProperty):
     def from_memory(self) -> Any:
         # TODO: add Pointer property i.e. name: str = Pointer(0x0, NullTerminatedString(...))
         if self.pointer:
-            if self.memory_object.memobj_process.process_64_bit:
-                format_string = "Q"
-            else:
-                format_string = "I"
-
-            pointer = self.read_formatted_from_offset(format_string)
+            pointer = self.read_formatted_from_offset(self.pointer_format_string)
             string_bytes = self.memory_object.memobj_process.read_memory(
                 pointer,
                 self.max_size
@@ -156,15 +149,10 @@ class NullTerminatedString(MemoryProperty):
             raise ValueError(f"Value was {value_len} while the max size is {self.max_size}")
 
         if self.pointer:
-            if self.memory_object.memobj_process.process_64_bit:
-                format_string = "Q"
-            else:
-                format_string = "I"
-
             allocation = self.memory_object.memobj_process.allocate_memory(value_len)
             self.memory_object.memobj_process.write_memory(allocation, value)
 
-            self.write_formatted_to_offset(format_string, allocation)
+            self.write_formatted_to_offset(self.pointer_format_string, allocation)
 
         else:
             self.memory_object.memobj_process.write_memory(
