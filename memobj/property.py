@@ -1,4 +1,5 @@
 import inspect
+import importlib
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Any, Union
 
@@ -66,6 +67,7 @@ class ObjectPointer(MemoryProperty):
         if isinstance(self.object_type, str):
             module = memory_object.__module__
 
+            globals_ = None
             if __name__ == module:
                 globals_ = globals()
 
@@ -73,17 +75,17 @@ class ObjectPointer(MemoryProperty):
                 globals_ = inspect.stack()[-1].frame.f_globals
 
             else:
-                for frame_info in inspect.stack():
-                    if frame_info.filename == module:
-                        globals_ = frame_info.frame.f_globals
-                        break
-                else:
-                    raise ValueError(f"Couldn't find frame for type {self.object_type}")
+                module_import = importlib.import_module(module)
+                try:
+                    typed_object_type = getattr(module_import, module)
+                except AttributeError:
+                    raise ValueError(f"{self.object_type} not found in scope of object")
 
-            typed_object_type = globals_.get(self.object_type)
+            if globals_ is not None:
+                typed_object_type = globals_.get(self.object_type)
 
-            if typed_object_type is None:
-                raise ValueError(f"{self.object_type} not found in scope of object")
+                if typed_object_type is None:
+                    raise ValueError(f"{self.object_type} not found in scope of object")
 
             self.object_type = typed_object_type
 
