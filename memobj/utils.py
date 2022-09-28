@@ -12,7 +12,7 @@ def get_padding(offset: int, align: int) -> int:
 def pad_format(format_string: str) -> str:
     stripped_endian = ""
 
-    if format_string.startswith(("<", ">")):
+    if format_string.startswith(("@", "=", "<", ">", "!")):
         stripped_endian = format_string[0]
         format_string = format_string[1:]
 

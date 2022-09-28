@@ -182,7 +182,7 @@ class SimpleDataProperty(MemoryProperty):
 
     @property
     def endianness(self) -> str:
-        if self.format_string.startswith(("<", ">")):
+        if self.format_string.startswith(("@", "=", "<", ">", "!")):
             return ""
 
         if self._endianness == "little":
