@@ -88,6 +88,7 @@ class ObjectPointer(MemoryProperty):
                 if typed_object_type is None:
                     raise ValueError(f"{self.object_type} not found in scope of object")
 
+            # noinspection PyUnboundLocalVariable
             self.object_type = typed_object_type
 
         return self.from_memory()
@@ -169,15 +170,21 @@ class SimpleDataProperty(MemoryProperty):
 
     def __init__(self, offset: int | None, *, endianness: str = "little", ignore_alignment: bool = False):
         if not ignore_alignment:
-            size = struct.calcsize(self.format_string)
-            if offset % size:
-                raise ValueError(f"{offset} is not aligned with data size {size}")
+            # TODO: should this error instead
+            if self.format_string is not None:
+                largest = max(struct.calcsize(i) for i in self.format_string)
+
+                if offset % largest:
+                    raise ValueError(f"{offset} is not aligned with largest type of size {largest}")
 
         super().__init__(offset)
         self._endianness = endianness
 
     @property
     def endianness(self) -> str:
+        if self.format_string.startswith(("<", ">")):
+            return ""
+
         if self._endianness == "little":
             return "<"
 
