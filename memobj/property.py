@@ -77,7 +77,7 @@ class ObjectPointer(MemoryProperty):
             else:
                 module_import = importlib.import_module(module)
                 try:
-                    typed_object_type = getattr(module_import, module)
+                    typed_object_type = getattr(module_import, self.object_type)
                 except AttributeError:
                     raise ValueError(f"{self.object_type} not found in scope of object")
 
