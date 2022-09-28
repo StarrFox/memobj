@@ -12,6 +12,17 @@ def is_aligned(value: int, align: int) -> bool:
     return (value & (align - 1)) == 0
 
 
+def is_power_of_two(value: int) -> bool:
+    return value > 0 and is_aligned(value, value)
+
+
+def get_alignment(size: int) -> int:
+    if is_power_of_two(size):
+        raise ValueError("alignment cannot be guessed")
+
+    return size & -size
+
+
 def get_padding(offset: int, align: int) -> int:
     return -offset & (align - 1)
 
