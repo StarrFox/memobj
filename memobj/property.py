@@ -1,5 +1,6 @@
 import inspect
 import importlib
+import struct
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Any, Union
 
@@ -166,7 +167,12 @@ class NullTerminatedString(MemoryProperty):
 class SimpleDataProperty(MemoryProperty):
     format_string: str = None
 
-    def __init__(self, offset: int | None, *, endianness: str = "little"):
+    def __init__(self, offset: int | None, *, endianness: str = "little", ignore_alignment: bool = False):
+        if not ignore_alignment:
+            size = struct.calcsize(self.format_string)
+            if offset % size:
+                raise ValueError(f"{offset} is not aligned with data size {size}")
+
         super().__init__(offset)
         self._endianness = endianness
 
