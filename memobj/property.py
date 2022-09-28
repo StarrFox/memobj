@@ -56,6 +56,9 @@ class MemoryProperty(property):
     def to_memory(self, value: Any):
         raise NotImplementedError()
 
+    def memory_size(self) -> int:
+        raise NotImplementedError()
+
 
 class ObjectPointer(MemoryProperty):
     def __init__(
@@ -121,6 +124,9 @@ class ObjectPointer(MemoryProperty):
     def to_memory(self, value: "MemoryObject"):
         self.write_formatted_to_offset(self.pointer_format_string, value.base_address)
 
+    def memory_size(self) -> int:
+        return 8 if self.memory_object.memobj_process.process_64_bit else 4
+
 
 class NullTerminatedString(MemoryProperty):
     def __init__(self, offset: int | None, max_size: int = 20, encoding: str = "utf-8", pointer: bool = False):
@@ -171,6 +177,12 @@ class NullTerminatedString(MemoryProperty):
                 value,
             )
 
+    def memory_size(self) -> int:
+        if self.pointer:
+            return 8 if self.memory_object.memobj_process.process_64_bit else 4
+        else:
+            return self.max_size
+
 
 class SimpleData(MemoryProperty):
     format_string: str = None
@@ -185,6 +197,9 @@ class SimpleData(MemoryProperty):
 
     def to_memory(self, value: Any):
         self.write_formatted_to_offset(self.format_string, value)
+
+    def memory_size(self) -> int:
+        return struct.calcsize(self.format_string)
 
 
 class Bool(SimpleData):
