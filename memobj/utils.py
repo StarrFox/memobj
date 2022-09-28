@@ -1,6 +1,14 @@
 import struct
 
 
+def is_aligned(value: int, align: int) -> bool:
+    return (value & (align - 1)) == 0
+
+
+def get_padding(offset: int, align: int) -> int:
+    return -offset & (align - 1)
+
+
 def pad_format(format_string: str) -> str:
     stripped_endian = ""
 
@@ -8,11 +16,17 @@ def pad_format(format_string: str) -> str:
         stripped_endian = format_string[0]
         format_string = format_string[1:]
 
-    largest = max(struct.calcsize(i) for i in format_string)
+    largest = max(struct.calcsize(c) for c in format_string)
 
     aligned_format = ""
+    offset = 0
     for format_char in format_string:
-        padding = "x" * (largest - struct.calcsize(format_char) - 1)
-        aligned_format += format_char + padding
+        align = struct.calcsize(format_char)
+
+        padding = get_padding(offset, align)
+        offset += align + padding
+        aligned_format += ("x" * padding) + format_char
+
+    aligned_format += "x" * get_padding(offset, largest)
 
     return stripped_endian + aligned_format
