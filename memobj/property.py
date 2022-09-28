@@ -168,33 +168,11 @@ class NullTerminatedString(MemoryProperty):
 class SimpleDataProperty(MemoryProperty):
     format_string: str = None
 
-    def __init__(self, offset: int | None, *, endianness: str = "little", ignore_alignment: bool = False):
-        if not ignore_alignment:
-            # TODO: should this error instead
-            if self.format_string is not None:
-                largest = max(struct.calcsize(i) for i in self.format_string)
-
-                if offset % largest:
-                    raise ValueError(f"{offset} is not aligned with largest type of size {largest}")
-
-        super().__init__(offset)
-        self._endianness = endianness
-
-    @property
-    def endianness(self) -> str:
-        if self.format_string.startswith(("@", "=", "<", ">", "!")):
-            return ""
-
-        if self._endianness == "little":
-            return "<"
-
-        return ">"
-
     def from_memory(self) -> Any:
-        return self.read_formatted_from_offset(self.endianness + self.format_string)
+        return self.read_formatted_from_offset(self.format_string)
 
     def to_memory(self, value: Any):
-        self.write_formatted_to_offset(self.endianness + self.format_string, value)
+        self.write_formatted_to_offset(self.format_string, value)
 
 
 class Bool(SimpleDataProperty):
