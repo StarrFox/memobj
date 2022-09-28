@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "memobj"
-version = "0.1.1"
+version = "0.2.0"
 description = "A library for defining objects in memory"
 authors = ["StarrFox <starrfox6312@gmail.com>"]
 license = "MIT"

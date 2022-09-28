@@ -1,6 +1,10 @@
 # memobj
 A library for defining objects in memory
 
+## installing
 python 3.11+ only!
+`pip install memobj`
 
-for support make an issue or post in our discord at https://discord.gg/7hBStdXkyR
+## support
+discord
+https://discord.gg/7hBStdXkyR

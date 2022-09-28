@@ -62,7 +62,26 @@ class Process:
         """
         raise NotImplementedError()
 
-    # TODO: allocate and free; can you do that on linux?
+    def allocate_memory(self, size: int) -> int:
+        """
+        Allocate <size> amount of memory in the process
+
+        Args:
+            size: The amount of memory to allocate
+
+        Returns:
+        The start address of the allocated memory
+        """
+        raise NotImplementedError()
+
+    def free_memory(self, address: int):
+        """
+        Free some memory in the process
+
+        Args:
+            address: The start address of the area to free
+        """
+        raise NotImplementedError()
 
     def read_memory(self, address: int, size: int) -> bytes:
         """
@@ -394,6 +413,54 @@ class WindowsProcess(Process):
 
         return cls(process_handle)
 
+    # noinspection PyMethodOverriding
+    def allocate_memory(self, size: int, *, preferred_start: int = None) -> int:
+        """
+        Allocate <size> amount of memory in the process
+
+        Args:
+            size: The amount of memory to allocate
+            preferred_start: The preferred start address of the allocation
+
+        Returns:
+        The start address of the allocated memory
+        """
+        with CheckWindowsOsError():
+            if preferred_start is not None:
+                preferred_start = ctypes.cast(preferred_start, ctypes.c_void_p)
+
+            else:
+                preferred_start = 0
+
+            # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex
+            allocation = ctypes.windll.kernel32.VirtualAllocEx(
+                self.process_handle,
+                preferred_start,
+                size,
+                0x1000,  # MEM_COMMIT, I don't see why you'd want any other type
+                0x40,  # page_execute_readwrite, I also don't see any reason to have a different protection
+            )
+
+            if allocation == 0:
+                raise ValueError(f"VirtualAllocEx failed for size {size}")
+
+        return allocation
+
+    # TODO: allow other free types
+    # noinspection PyMethodOverriding
+    def free_memory(self, address: int):
+        with CheckWindowsOsError():
+            # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualfreeex
+            success = ctypes.windll.kernel32.VirtualFreeEx(
+                self.process_handle,
+                ctypes.c_void_p(address),
+                0,
+                0x8000,  # MEM_RELEASE
+            )
+
+            if success == 0:
+                raise ValueError(f"VirtualFreeEx failed for address {address}")
+
     def read_memory(self, address: int, size: int) -> bytes:
         with CheckWindowsOsError():
             buffer_type = ctypes.c_char * size
@@ -449,6 +516,7 @@ class WindowsProcess(Process):
                 continue
 
             for match in regex.finditer(pattern, region_data, regex.DOTALL):
+                # noinspection PyUnresolvedReferences
                 matches.append(region_info.BaseAddress + match.span()[0])
 
         return matches
