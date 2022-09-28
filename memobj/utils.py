@@ -1,5 +1,12 @@
 import struct
 
+def align_up(value: int, align: int) -> int:
+    return align_down(value + (align - 1), align)
+
+
+def align_down(value: int, align: int) -> int:
+    return value & -align
+
 
 def is_aligned(value: int, align: int) -> bool:
     return (value & (align - 1)) == 0
