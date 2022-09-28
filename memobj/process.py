@@ -496,6 +496,7 @@ class WindowsProcess(Process):
     def scan_memory(self, pattern: regex.Pattern | bytes, *, module_name: str = None) -> list[int]:
         region_start = 0
 
+        # Finding information on this is quite the moment
         if self.process_64_bit:
             max_size = 0x7FFFFFFF0000
         else:
@@ -506,10 +507,11 @@ class WindowsProcess(Process):
             region_info = self.virtual_query(region_start)
             region_start = region_info.BaseAddress + region_info.RegionSize
 
+            # check for MEM_COMMIT
             if region_info.State != 0x1000:
                 continue
 
-            # TODO: is this actually faster
+            # TODO: is this actually faster than checking if the pages can be read
             try:
                 region_data = self.read_memory(region_info.BaseAddress, region_info.RegionSize)
             except OSError:
@@ -554,29 +556,6 @@ class WindowsProcess(Process):
         return memory_basic_information
 
 
-# TODO: remove after prototyping
-if __name__ == "__main__":
-    # process = WindowsProcess.from_name("Notepad.exe", require_debug=True)
-    #process = WindowsProcess.from_name("Notepad.exe")
-    process = WindowsProcess.from_name("WizardGraphicalClient.exe")
-    print(f"{process.process_64_bit=} {process.python_64_bit=} {process.system_64_bit=}")
-    apattern = rb".........\xF3\x0F\x11\x45\xE0.........\xF3\x0F\x11\x4D\xE4.........\xF3\x0F\x11\x45\xE8\x48"
-    results = process.scan_memory(apattern)
-    print(f"{len(results)=} {process.read_memory(results[0], len(apattern))}")
-
-    # region_info = process.virtual_query(2498559078400)
-    #
-    # for name, _ in region_info._fields_:
-    #     print(f"\t{name}={getattr(region_info, name)}")
-    #
-    # print("next")
-    #
-    # region_info = process.virtual_query(0)
-    #
-    # for name, _ in region_info._fields_:
-    #     print(f"\t{name}={getattr(region_info, name)}")
-
-    # data = process.read_memory(0x1D1C0A4173C, 4)
-    # print(data)
-    # process.write_memory(0x1D1C0A4173C, b"\x46\x01")
-    # print(process.read_formatted(0x1D1C0A4173C, "<i"))
+# TODO
+# class LinuxProcess(Process):
+#     pass
