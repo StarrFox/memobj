@@ -1,6 +1,5 @@
 import inspect
 import importlib
-import struct
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Any, Union
 
@@ -35,12 +34,20 @@ class MemoryProperty(property):
         offset_address = self.memory_object.base_address + self.offset
         self.memory_object.memobj_process.write_formatted(offset_address, format_string, value)
 
-    def _get_prelude(self, memory_object):
-        self.memory_object = memory_object
+    def _get_prelude(self, preluder: MemoryObject | "MemoryProperty"):
+        if isinstance(preluder, MemoryProperty):
+            self.memory_object = preluder.memory_object
+        else:
+            self.memory_object = preluder
+
         return self.from_memory()
 
-    def _set_prelude(self, memory_object, value):
-        self.memory_object = memory_object
+    def _set_prelude(self, preluder: MemoryObject | "MemoryProperty", value):
+        if isinstance(preluder, MemoryProperty):
+            self.memory_object = preluder.memory_object
+        else:
+            self.memory_object = preluder
+
         self.to_memory(value)
 
     def from_memory(self) -> Any:
