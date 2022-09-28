@@ -1,1 +1,0 @@
-elevate poetry run py memobj\process.py
