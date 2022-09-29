@@ -65,7 +65,6 @@ def test_nested_object():
     assert test_instance.other.value == 23
 
 
-# TODO: this test currently fails
 def test_nested_object_forward_ref():
     process = get_current_process()
 
@@ -75,11 +74,11 @@ def test_nested_object_forward_ref():
     # gets the address of the pointer
     test_value_address = get_address_of_ctypes_obj(pointer_to_test_value, process.pointer_format_string)
 
+    class Test(MemoryObject):
+        other: "OtherTest" = Pointer(0x0, "OtherTest")
+
     class OtherTest(MemoryObject):
         value = SimpleData(0x0, format_string="i")
-
-    class Test(MemoryObject):
-        other: OtherTest = Pointer(0x0, "OtherTest")
 
     test_instance = Test(address=test_value_address, process=process)
 
