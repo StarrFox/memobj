@@ -10,15 +10,19 @@ if TYPE_CHECKING:
 class MemoryObjectMeta(type):
     # noinspection PyMethodParameters
     def __new__(cls, class_name: str, superclasses: tuple[type], attributed_dict: dict, *args, **kwargs):
-        # print(f"{class_name=}")
-        # print(f"{superclasses=}")
-        # print(f"{attributed_dict=}")
-        # print(f"{args=} {kwargs=}")
+        if not superclasses:
+            return super().__new__(cls, class_name, superclasses, attributed_dict)
+
+        print(f"{superclasses[-1]=}")
+
+        memory_object = superclasses[-1]
+
+        if memory_object.__memory_object_instances__.get(class_name):
+            raise NameError(f"You can only have one MemoryObject named {class_name}")
+
         new_instance = super().__new__(cls, class_name, superclasses, attributed_dict)
 
-        # we can't check if MemoryObject is an instance of itself
-        if not superclasses:
-            return new_instance
+        memory_object[class_name] = new_instance
 
         __memory_objects__ = {}
         __memory_properties__ = {}
@@ -28,21 +32,6 @@ class MemoryObjectMeta(type):
             elif isinstance(_type, MemoryProperty):
                 __memory_properties__[name] = _type
 
-                if isinstance(_type, Pointer):
-                    if isinstance(_type.pointed_type, str):
-
-                        frame_up_globals = inspect.stack()[1].frame.f_globals
-                        frame_up_locals = inspect.stack()[1].frame.f_locals
-
-                        for scope in (frame_up_globals, frame_up_locals):
-                            try:
-                                typed_pointed_type = scope[_type.pointed_type]
-                            except KeyError:
-                                pass
-                            else:
-                                _type.pointed_type = typed_pointed_type()
-                                break
-
         new_instance.__memory_objects__ = __memory_objects__
         new_instance.__memory_properties__ = __memory_properties__
 
@@ -50,6 +39,8 @@ class MemoryObjectMeta(type):
 
 
 class MemoryObject(metaclass=MemoryObjectMeta):
+    __memory_object_instances__ = {}
+
     __memory_objects__ = {}
     __memory_properties__ = {}
 
