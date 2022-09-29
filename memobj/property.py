@@ -4,9 +4,10 @@ import struct
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Any, Union
 
+from memobj.object import MemoryObject
+
 
 if TYPE_CHECKING:
-    from memobj.object import MemoryObject
     from memobj.process import Process, WindowsProcess
 
 
