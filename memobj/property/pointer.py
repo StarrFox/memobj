@@ -96,6 +96,23 @@ class Pointer(MemoryProperty):
             ):
                 dest = source
 
+        elif isinstance(self._pointed_type, str):
+            typed_object_type = MemoryObject.__memory_object_instances__.get(self._pointed_type)
+
+            if typed_object_type is None:
+                raise ValueError(f"No MemoryObject type named {self._pointed_type}")
+
+            self._pointed_type = typed_object_type()
+
+            self._pointed_type._base_address = addr
+            self._pointed_type.memobj_process = self.memory_object.memobj_process
+
+            for (dest, source) in zip(
+                self._pointed_type.__memory_properties__.values(),
+                value.__memory_properties__.values()
+            ):
+                dest = source
+
         elif isinstance(self._pointed_type, MemoryProperty):
             self._pointed_type.memory_object = MemoryObject(
                 address=addr,
