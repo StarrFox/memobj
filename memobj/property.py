@@ -1,5 +1,6 @@
 import inspect
 import importlib
+import struct
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Any, Union
 
