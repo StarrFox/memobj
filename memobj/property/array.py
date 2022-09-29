@@ -4,11 +4,14 @@ from copy import copy
 from . import MemoryProperty
 from .. import MemoryObject
 
-# TODO: MemoryObject support.
-
 
 class Array(MemoryProperty):
-    def __init__(self, offset: int | None, element_type: MemoryProperty | MemoryObject, *, count: int | MemoryProperty | None = None):
+    def __init__(
+        self,
+        offset: int | None,
+        element_type: MemoryProperty, *,
+        count: int | MemoryProperty | None = None
+    ):
         super().__init__(offset)
 
         self._element_type = element_type
@@ -20,7 +23,7 @@ class Array(MemoryProperty):
     def element_count(self) -> int:
         if isinstance(self._count, MemoryProperty):
             return self._count.from_memory()
-        
+
         elif isinstance(self._count, int):
             return self._count
 
@@ -28,28 +31,16 @@ class Array(MemoryProperty):
             raise NotImplementedError("missing count requires overriden .element_count() impl")
 
     def from_memory(self) -> Any:
-        if isinstance(self._element_type, MemoryProperty):
-            self._element_type.memory_object = MemoryObject(
-                address=self.memory_object.base_address + self.offset,
-                process=self.memory_object.memobj_process,
-            )
+        elements = []
 
-            elements = []
-            for idx in range(self.element_count()):
-                self._element_type.offset = idx * self.element_size()
-                elements.append(self._element_type.from_memory())
+        self._element_type.memory_object = MemoryObject(
+            address=self.memory_object.base_address + self.offset,
+            process=self.memory_object.memobj_process,
+        )
 
-            return elements
-
-        elif isinstance(self._element_type, MemoryObject):
-            elements = []
-            address = self.memory_object.base_address + self.offset
-            for _ in range(self.element_count()):
-                copied_instance = copy(self._element_type)
-                copied_instance._base_address = address
-                elements.append(copied_instance)
-
-                address += self.element_size()
+        for idx in range(self.element_count()):
+            self._element_type.offset = idx * self.element_size()
+            elements.append(self._element_type.from_memory())
 
             return elements
 
