@@ -22,7 +22,7 @@ class MemoryObjectMeta(type):
 
         new_instance = super().__new__(cls, class_name, superclasses, attributed_dict)
 
-        memory_object[class_name] = new_instance
+        memory_object.__memory_object_instances__[class_name] = new_instance
 
         __memory_objects__ = {}
         __memory_properties__ = {}
