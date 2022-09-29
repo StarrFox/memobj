@@ -22,10 +22,7 @@ class MemoryProperty(property):
 
     @cached_property
     def pointer_format_string(self) -> str:
-        if self.memory_object.memobj_process.process_64_bit:
-            return "Q"
-        else:
-            return "I"
+        return self.memory_object.memobj_process.pointer_format_string
 
     def read_formatted_from_offset(self, format_string: str) -> tuple[Any] | Any:
         offset_address = self.memory_object.base_address + self.offset

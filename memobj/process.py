@@ -36,6 +36,13 @@ class Process:
         """
         return sys.maxsize == (2 ** 63) - 1
 
+    @functools.cached_property
+    def pointer_format_string(self) -> str:
+        if self.process_64_bit:
+            return "Q"
+        else:
+            return "I"
+
     @classmethod
     def from_name(cls, name: str) -> Self:
         """
