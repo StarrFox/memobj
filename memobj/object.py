@@ -1,3 +1,4 @@
+import inspect
 from typing import TYPE_CHECKING, Union
 
 from memobj.property import MemoryProperty, Pointer
@@ -26,6 +27,21 @@ class MemoryObjectMeta(type):
                 __memory_objects__[name] = _type
             elif isinstance(_type, MemoryProperty):
                 __memory_properties__[name] = _type
+
+                if isinstance(_type, Pointer):
+                    if isinstance(_type.pointed_type, str):
+
+                        frame_up_globals = inspect.stack()[1].frame.f_globals
+                        frame_up_locals = inspect.stack()[1].frame.f_locals
+
+                        for scope in (frame_up_globals, frame_up_locals):
+                            try:
+                                typed_pointed_type = scope[_type.pointed_type]
+                            except KeyError:
+                                pass
+                            else:
+                                _type.pointed_type = typed_pointed_type()
+                                break
 
         new_instance.__memory_objects__ = __memory_objects__
         new_instance.__memory_properties__ = __memory_properties__
