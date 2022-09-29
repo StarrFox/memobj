@@ -35,20 +35,12 @@ class MemoryProperty(property):
         offset_address = self.memory_object.base_address + self.offset
         self.memory_object.memobj_process.write_formatted(offset_address, format_string, value)
 
-    def _get_prelude(self, preluder: MemoryObject | "MemoryProperty"):
-        if isinstance(preluder, MemoryProperty):
-            self.memory_object = preluder.memory_object
-        else:
-            self.memory_object = preluder
-
+    def _get_prelude(self, preluder: MemoryObject):
+        self.memory_object = preluder
         return self.from_memory()
 
-    def _set_prelude(self, preluder: MemoryObject | "MemoryProperty", value):
-        if isinstance(preluder, MemoryProperty):
-            self.memory_object = preluder.memory_object
-        else:
-            self.memory_object = preluder
-
+    def _set_prelude(self, preluder: MemoryObject, value):
+        self.memory_object = preluder
         self.to_memory(value)
 
     def from_memory(self) -> Any:
@@ -61,23 +53,27 @@ class MemoryProperty(property):
         raise NotImplementedError()
 
 
-class ObjectPointer(MemoryProperty):
-    def __init__(
-            self,
-            offset: int | None,
-            object_type: Optional[Union[type["MemoryObject"], str]] = None,
-            *,
-            endianness: str = "little",
-    ):
+class Pointer(MemoryProperty):
+    """
+    name = Pointer(0x20, String(...))
+    other_type = Pointer(0x20, "NameOfType")
+    other_type2 = Pointer(0x20, OtherType())
+    position = Pointer(0x30, SimpleData(format_string="fff"))
+    """
+    def __init__(self, offset: int | None, pointed_type: str | MemoryProperty | MemoryObject):
         super().__init__(offset)
-        self.object_type = object_type
-        self._endianness = endianness
+        self.pointed_type = pointed_type
 
-    def _get_prelude(self, memory_object):
-        self.memory_object = memory_object
+    def from_memory(self) -> Any:
+        pointer = self.read_formatted_from_offset(self.pointer_format_string)
 
-        if isinstance(self.object_type, str):
-            module = memory_object.__module__
+        if isinstance(self.pointed_type, MemoryObject):
+            self.pointed_type._base_address = pointer
+            self.pointed_type.memobj_process = self.memory_object.memobj_process
+            return self.pointed_type
+
+        elif isinstance(self.pointed_type, str):
+            module = self.memory_object.__module__
 
             globals_ = None
             if __name__ == module:
@@ -89,41 +85,34 @@ class ObjectPointer(MemoryProperty):
             else:
                 module_import = importlib.import_module(module)
                 try:
-                    typed_object_type = getattr(module_import, self.object_type)
+                    typed_object_type = getattr(module_import, self.pointed_type)
                 except AttributeError:
-                    raise ValueError(f"{self.object_type} not found in scope of object")
+                    raise ValueError(f"{self.pointed_type} not found in scope of object")
 
             if globals_ is not None:
-                typed_object_type = globals_.get(self.object_type)
+                typed_object_type = globals_.get(self.pointed_type)
 
                 if typed_object_type is None:
-                    raise ValueError(f"{self.object_type} not found in scope of object")
+                    raise ValueError(f"{self.pointed_type} not found in scope of object")
 
             # noinspection PyUnboundLocalVariable
-            self.object_type = typed_object_type
+            self.pointed_type = typed_object_type()
 
-        return self.from_memory()
+            self.pointed_type._base_address = pointer
+            self.pointed_type.memobj_process = self.memory_object.memobj_process
+            return self.pointed_type
 
-    @property
-    def endianness(self) -> str:
-        if self._endianness == "little":
-            return "<"
+        # MemoryProperty
+        elif isinstance(self.pointed_type, MemoryProperty):
+            # create a mock object at the address
+            self.pointed_type.memory_object = MemoryObject(
+                address=pointer,
+                process=self.memory_object.memobj_process,
+            )
+            return self.pointed_type.from_memory()
 
-        return ">"
-
-    def from_memory(self) -> Any:
-        pointer = self.read_formatted_from_offset(self.endianness + self.pointer_format_string)
-
-        if pointer == 0:
-            return None
-
-        if self.object_type is None:
-            return type(self.memory_object)(pointer, self.memory_object.memobj_process)
-
-        return self.object_type(pointer, self.memory_object.memobj_process)
-
-    def to_memory(self, value: "MemoryObject"):
-        self.write_formatted_to_offset(self.pointer_format_string, value.base_address)
+    def to_memory(self, value: Any):
+        pass
 
     def memory_size(self) -> int:
         return 8 if self.memory_object.memobj_process.process_64_bit else 4
