@@ -3,6 +3,7 @@ import ctypes
 import ctypes.wintypes
 import enum
 import functools
+import platform
 import struct
 import sys
 from typing import Self, Any
@@ -34,7 +35,7 @@ class Process:
         """
         If the system is 64 bit
         """
-        return sys.maxsize == (2 ** 63) - 1
+        return platform.architecture()[0] == "64bit"
 
     @functools.cached_property
     def pointer_format_string(self) -> str:
