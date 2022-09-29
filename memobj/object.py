@@ -1,11 +1,42 @@
 from typing import TYPE_CHECKING, Union
 
+from memobj.property import MemoryProperty, Pointer
 
 if TYPE_CHECKING:
     from .process import Process, WindowsProcess
 
 
-class MemoryObject:
+class MemoryObjectMeta(type):
+    # noinspection PyMethodParameters
+    def __new__(cls, class_name: str, superclasses: tuple[type], attributed_dict: dict, *args, **kwargs):
+        # print(f"{class_name=}")
+        # print(f"{superclasses=}")
+        # print(f"{attributed_dict=}")
+        # print(f"{args=} {kwargs=}")
+        new_instance = super().__new__(cls, class_name, superclasses, attributed_dict)
+
+        # we can't check if MemoryObject is an instance of itself
+        if not superclasses:
+            return new_instance
+
+        __memory_objects__ = {}
+        __memory_properties__ = {}
+        for name, _type in attributed_dict.items():
+            if isinstance(_type, MemoryObject):
+                __memory_objects__[name] = _type
+            elif isinstance(_type, MemoryProperty):
+                __memory_properties__[name] = _type
+
+        new_instance.__memory_objects__ = __memory_objects__
+        new_instance.__memory_properties__ = __memory_properties__
+
+        return new_instance
+
+
+class MemoryObject(metaclass=MemoryObjectMeta):
+    __memory_objects__ = {}
+    __memory_properties__ = {}
+
     def __init__(
             self,
             offset: int = None,
@@ -26,6 +57,9 @@ class MemoryObject:
         attr = super().__getattribute__(name)
 
         if not isinstance(attr, MemoryObject):
+            return attr
+
+        if isinstance(self.__memory_properties__[name], Pointer):
             return attr
 
         attr._base_address = self.base_address + attr._offset

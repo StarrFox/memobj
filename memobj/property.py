@@ -4,10 +4,9 @@ import struct
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Any, Union
 
-from memobj.object import MemoryObject
-
 
 if TYPE_CHECKING:
+    from memobj.object import MemoryObject
     from memobj.process import Process, WindowsProcess
 
 
@@ -36,11 +35,11 @@ class MemoryProperty(property):
         offset_address = self.memory_object.base_address + self.offset
         self.memory_object.memobj_process.write_formatted(offset_address, format_string, value)
 
-    def _get_prelude(self, preluder: MemoryObject):
+    def _get_prelude(self, preluder: "MemoryObject"):
         self.memory_object = preluder
         return self.from_memory()
 
-    def _set_prelude(self, preluder: MemoryObject, value):
+    def _set_prelude(self, preluder: "MemoryObject", value):
         self.memory_object = preluder
         self.to_memory(value)
 
@@ -61,12 +60,15 @@ class Pointer(MemoryProperty):
     other_type2 = Pointer(0x20, OtherType())
     position = Pointer(0x30, SimpleData(format_string="fff"))
     """
-    def __init__(self, offset: int | None, pointed_type: str | MemoryProperty | MemoryObject):
+    def __init__(self, offset: int | None, pointed_type: Union[str, MemoryProperty, "MemoryObject"]):
         super().__init__(offset)
         self.pointed_type = pointed_type
 
     def from_memory(self) -> Any:
         pointer = self.read_formatted_from_offset(self.pointer_format_string)
+
+        # this is to avoid circular import garbage
+        from memobj.object import MemoryObject
 
         if isinstance(self.pointed_type, MemoryObject):
             self.pointed_type._base_address = pointer
@@ -110,6 +112,7 @@ class Pointer(MemoryProperty):
                 address=pointer,
                 process=self.memory_object.memobj_process,
             )
+            self.pointed_type.offset = 0
             return self.pointed_type.from_memory()
 
     def to_memory(self, value: Any):
@@ -178,7 +181,7 @@ class NullTerminatedString(MemoryProperty):
 class SimpleData(MemoryProperty):
     format_string: str = None
 
-    def __init__(self, offset: int | None, format_string: str = None):
+    def __init__(self, offset: int | None = None, format_string: str = None):
         super().__init__(offset)
         if format_string is not None:
             self.format_string = format_string
