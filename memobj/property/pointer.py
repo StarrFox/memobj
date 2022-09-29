@@ -1,5 +1,4 @@
-from functools import cached_property
-from typing import TYPE_CHECKING, Optional, Any, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from . import MemoryProperty
 
