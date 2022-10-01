@@ -23,7 +23,7 @@ class FloatVec3(MemoryProperty):
 
 class MyObject(MemoryObject):
     # you can forward reference classes by putting them in a string
-    my_other_object: "MyOtherObject" = ObjectPointer(0x20, "MyOtherObject")
+    my_other_object: "MyOtherObject" = Pointer(0x20, "MyOtherObject")
 
 
 class MyOtherObject(MemoryObject):
@@ -32,7 +32,7 @@ class MyOtherObject(MemoryObject):
 
 process = WindowsProcess.from_name("my_process.exe")
 
-my_object = MyObject(0xFFFFFFFF, process)
+my_object = MyObject(address=0xFFFFFFFF, process=process)
 print(my_object.my_other_object.my_float_vec)
 ```
 
