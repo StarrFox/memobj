@@ -10,8 +10,7 @@ repository = "https://github.com/StarrFox/memobj"
 [tool.poetry.dependencies]
 python = "^3.11rc2"
 regex = "^2022.9.13"
-
-[tool.poetry.dev-dependencies]
+procfs = {version = "^0.5.0", platform = "linux"}
 
 [tool.poetry.group.tests.dependencies]
 pytest = "^7.1.3"

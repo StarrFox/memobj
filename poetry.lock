@@ -52,6 +52,14 @@ dev = ["pre-commit", "tox"]
 testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
+name = "procfs"
+version = "0.5.0"
+description = "Python API for the Linux /proc virtual filesystem"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "py"
 version = "1.11.0"
 description = "library with cross-python path, ini-parsing, io, code, log facilities"
@@ -109,7 +117,7 @@ python-versions = ">=3.7"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.11rc2"
-content-hash = "8adcc2a282548541904c24622a97332854fe6852317c3554cfd651e15c655589"
+content-hash = "00bf891b587c4b81c4b87838f293531fd0c6d742d805f2a5076e47ff5870d41d"
 
 [metadata.files]
 attrs = [
@@ -131,6 +139,9 @@ packaging = [
 pluggy = [
     {file = "pluggy-1.0.0-py2.py3-none-any.whl", hash = "sha256:74134bbf457f031a36d68416e1509f34bd5ccc019f0bcc952c7b909d06b37bd3"},
     {file = "pluggy-1.0.0.tar.gz", hash = "sha256:4224373bacce55f955a878bf9cfa763c1e360858e330072059e10bad68531159"},
+]
+procfs = [
+    {file = "procfs-0.5.0.tar.gz", hash = "sha256:66ed159902551727dc49d035653c8f113eb991ee1eda3e10bd343cc0f3e70fcc"},
 ]
 py = [
     {file = "py-1.11.0-py2.py3-none-any.whl", hash = "sha256:607c53218732647dff4acdfcd50cb62615cedf612e72d1724fb1a0cc6405b378"},
