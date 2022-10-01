@@ -563,6 +563,30 @@ class WindowsProcess(Process):
         return memory_basic_information
 
 
-# TODO
-# class LinuxProcess(Process):
-#     pass
+class LinuxProcess(Process):
+    @property
+    def process_64_bit(self) -> bool:
+        pass
+
+    @classmethod
+    def from_name(cls, name: str) -> Self:
+        pass
+
+    @classmethod
+    def from_id(cls, pid: int) -> Self:
+        pass
+
+    def allocate_memory(self, size: int) -> int:
+        pass
+
+    def free_memory(self, address: int):
+        pass
+
+    def read_memory(self, address: int, size: int) -> bytes:
+        pass
+
+    def write_memory(self, address: int, value: bytes):
+        pass
+
+    def scan_memory(self, pattern: regex.Pattern | bytes, *, module_name: str = None) -> list[int]:
+        pass
