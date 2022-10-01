@@ -5,7 +5,6 @@ import enum
 import functools
 import platform
 import struct
-import sys
 from typing import Self, Any
 
 # faster than builtin re
