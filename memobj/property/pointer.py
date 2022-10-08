@@ -23,6 +23,15 @@ class Pointer(MemoryProperty):
 
         self._pointed_type = pointed_type
 
+    def _get_prelude(self, preluder: "MemoryObject"):
+        self.memory_object = preluder
+        return self
+
+    # TODO: what should this do?
+    def _set_prelude(self, preluder: "MemoryObject", value):
+        self.memory_object = preluder
+        raise NotImplementedError()
+
     @staticmethod
     def is_null(addr: int) -> bool:
         return addr == 0
@@ -46,10 +55,8 @@ class Pointer(MemoryProperty):
             return self._pointed_type
 
         elif isinstance(self._pointed_type, str):
-            typed_object_type = MemoryObject.__memory_object_instances__.get(self._pointed_type)
-
-            if typed_object_type is None:
-                raise ValueError(f"No MemoryObject type named {self._pointed_type}")
+            # noinspection PyProtectedMember
+            typed_object_type = MemoryObject._resolve_string_class_lookup(self._pointed_type)
 
             self._pointed_type = typed_object_type()
 
@@ -89,28 +96,20 @@ class Pointer(MemoryProperty):
             self._pointed_type._base_address = addr
             self._pointed_type.memobj_process = self.memory_object.memobj_process
 
-            for (dest, source) in zip(
-                self._pointed_type.__memory_properties__.values(),
-                value.__memory_properties__.values()
-            ):
-                dest = source
+            for attribute_name in self._pointed_type.__memory_properties__.keys():
+                setattr(self._pointed_type, attribute_name, getattr(value, attribute_name))
 
         elif isinstance(self._pointed_type, str):
-            typed_object_type = MemoryObject.__memory_object_instances__.get(self._pointed_type)
-
-            if typed_object_type is None:
-                raise ValueError(f"No MemoryObject type named {self._pointed_type}")
+            # noinspection PyProtectedMember
+            typed_object_type = MemoryObject._resolve_string_class_lookup(self._pointed_type)
 
             self._pointed_type = typed_object_type()
 
             self._pointed_type._base_address = addr
             self._pointed_type.memobj_process = self.memory_object.memobj_process
 
-            for (dest, source) in zip(
-                self._pointed_type.__memory_properties__.values(),
-                value.__memory_properties__.values()
-            ):
-                dest = source
+            for attribute_name in self._pointed_type.__memory_properties__.keys():
+                setattr(self._pointed_type, attribute_name, getattr(value, attribute_name))
 
         elif isinstance(self._pointed_type, MemoryProperty):
             self._pointed_type.memory_object = MemoryObject(
