@@ -95,7 +95,7 @@ class Pointer(MemoryProperty):
             return self.pointed_type.from_memory()
 
     def to_memory(self, value: Any):
-        pass
+        raise NotImplementedError()
 
     def memory_size(self) -> int:
         return self.pointer_size
