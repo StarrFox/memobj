@@ -1,5 +1,6 @@
 import struct
 
+
 def align_up(value: int, align: int) -> int:
     return align_down(value + (align - 1), align)
 
