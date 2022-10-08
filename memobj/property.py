@@ -73,27 +73,10 @@ class Pointer(MemoryProperty):
             return self.pointed_type
 
         elif isinstance(self.pointed_type, str):
-            module = self.memory_object.__module__
+            typed_object_type = MemoryObject.__memory_object_instances__.get(self.pointed_type)
 
-            globals_ = None
-            if __name__ == module:
-                globals_ = globals()
-
-            elif module == "__main__":
-                globals_ = inspect.stack()[-1].frame.f_globals
-
-            else:
-                module_import = importlib.import_module(module)
-                try:
-                    typed_object_type = getattr(module_import, self.pointed_type)
-                except AttributeError:
-                    raise ValueError(f"{self.pointed_type} not found in scope of object")
-
-            if globals_ is not None:
-                typed_object_type = globals_.get(self.pointed_type)
-
-                if typed_object_type is None:
-                    raise ValueError(f"{self.pointed_type} not found in scope of object")
+            if typed_object_type is None:
+                raise ValueError(f"No MemoryObject type named {self.pointed_type}")
 
             # noinspection PyUnboundLocalVariable
             self.pointed_type = typed_object_type()

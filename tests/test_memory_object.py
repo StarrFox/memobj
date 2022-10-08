@@ -37,7 +37,7 @@ def test_simple_data_pointer():
 
     test_value_address = get_address_of_ctypes_obj(pointer_to_test_value, process.pointer_format_string)
 
-    class Test(MemoryObject):
+    class Test(MemoryObject, replace=True):
         other = Pointer(0x0, SimpleData(format_string="i"))
 
     test_instance = Test(address=test_value_address, process=process)
@@ -54,10 +54,10 @@ def test_nested_object():
     # gets the address of the pointer
     test_value_address = get_address_of_ctypes_obj(pointer_to_test_value, process.pointer_format_string)
 
-    class OtherTest(MemoryObject):
+    class OtherTest(MemoryObject, replace=True):
         value = SimpleData(0x0, format_string="i")
 
-    class Test(MemoryObject):
+    class Test(MemoryObject, replace=True):
         other: OtherTest = Pointer(0x0, OtherTest())
 
     test_instance = Test(address=test_value_address, process=process)
@@ -74,10 +74,10 @@ def test_nested_object_forward_ref():
     # gets the address of the pointer
     test_value_address = get_address_of_ctypes_obj(pointer_to_test_value, process.pointer_format_string)
 
-    class Test(MemoryObject):
+    class Test(MemoryObject, replace=True):
         other: "OtherTest" = Pointer(0x0, "OtherTest")
 
-    class OtherTest(MemoryObject):
+    class OtherTest(MemoryObject, replace=True):
         value = SimpleData(0x0, format_string="i")
 
     test_instance = Test(address=test_value_address, process=process)

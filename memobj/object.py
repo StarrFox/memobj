@@ -1,5 +1,5 @@
 import inspect
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Self
 
 from memobj.property import MemoryProperty, Pointer
 
@@ -8,21 +8,18 @@ if TYPE_CHECKING:
 
 
 class MemoryObjectMeta(type):
+    # TODO: move to __init_subclass__?
     # noinspection PyMethodParameters
     def __new__(cls, class_name: str, superclasses: tuple[type], attributed_dict: dict, *args, **kwargs):
         if not superclasses:
             return super().__new__(cls, class_name, superclasses, attributed_dict)
 
-        print(f"{superclasses[-1]=}")
-
+        new_instance = super().__new__(cls, class_name, superclasses, attributed_dict)
         memory_object = superclasses[-1]
 
-        if memory_object.__memory_object_instances__.get(class_name):
-            raise NameError(f"You can only have one MemoryObject named {class_name}")
+        replace = kwargs.pop("replace", False)
 
-        new_instance = super().__new__(cls, class_name, superclasses, attributed_dict)
-
-        memory_object.__memory_object_instances__[class_name] = new_instance
+        memory_object._register_string_class_lookup(new_instance, replace)
 
         __memory_objects__ = {}
         __memory_properties__ = {}
@@ -59,6 +56,21 @@ class MemoryObject(metaclass=MemoryObjectMeta):
     @property
     def base_address(self):
         return self._base_address
+
+    @staticmethod
+    def _resolve_string_class_lookup(class_name: str) -> type[Self]:
+        try:
+            return MemoryObject.__memory_object_instances__[class_name]
+        except KeyError:
+            raise ValueError(f"No registered MemoryObject named {class_name}")
+
+    @staticmethod
+    def _register_string_class_lookup(type_instance: type[Self], replace: bool = False):
+        class_name = type_instance.__name__
+        if MemoryObject.__memory_object_instances__.get(class_name) and not replace:
+            raise NameError(f"You can only have one MemoryObject named {type_instance.__name__}")
+
+        MemoryObject.__memory_object_instances__[class_name] = type_instance
 
     def __getattribute__(self, name):
         attr = super().__getattribute__(name)
