@@ -1,5 +1,4 @@
-import inspect
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Self
 
 from memobj.property import MemoryProperty, Pointer
 
@@ -8,17 +7,18 @@ if TYPE_CHECKING:
 
 
 class MemoryObjectMeta(type):
+    # TODO: move to __init_subclass__?
     # noinspection PyMethodParameters
     def __new__(cls, class_name: str, superclasses: tuple[type], attributed_dict: dict, *args, **kwargs):
-        # print(f"{class_name=}")
-        # print(f"{superclasses=}")
-        # print(f"{attributed_dict=}")
-        # print(f"{args=} {kwargs=}")
-        new_instance = super().__new__(cls, class_name, superclasses, attributed_dict)
-
-        # we can't check if MemoryObject is an instance of itself
         if not superclasses:
-            return new_instance
+            return super().__new__(cls, class_name, superclasses, attributed_dict)
+
+        new_instance = super().__new__(cls, class_name, superclasses, attributed_dict)
+        memory_object = superclasses[-1]
+
+        replace = kwargs.pop("replace", False)
+
+        memory_object._register_string_class_lookup(new_instance, replace)
 
         __memory_objects__ = {}
         __memory_properties__ = {}
@@ -28,21 +28,6 @@ class MemoryObjectMeta(type):
             elif isinstance(_type, MemoryProperty):
                 __memory_properties__[name] = _type
 
-                if isinstance(_type, Pointer):
-                    if isinstance(_type.pointed_type, str):
-
-                        frame_up_globals = inspect.stack()[1].frame.f_globals
-                        frame_up_locals = inspect.stack()[1].frame.f_locals
-
-                        for scope in (frame_up_globals, frame_up_locals):
-                            try:
-                                typed_pointed_type = scope[_type.pointed_type]
-                            except KeyError:
-                                pass
-                            else:
-                                _type.pointed_type = typed_pointed_type()
-                                break
-
         new_instance.__memory_objects__ = __memory_objects__
         new_instance.__memory_properties__ = __memory_properties__
 
@@ -50,6 +35,8 @@ class MemoryObjectMeta(type):
 
 
 class MemoryObject(metaclass=MemoryObjectMeta):
+    __memory_object_instances__ = {}
+
     __memory_objects__ = {}
     __memory_properties__ = {}
 
@@ -68,6 +55,21 @@ class MemoryObject(metaclass=MemoryObjectMeta):
     @property
     def base_address(self):
         return self._base_address
+
+    @staticmethod
+    def _resolve_string_class_lookup(class_name: str) -> type[Self]:
+        try:
+            return MemoryObject.__memory_object_instances__[class_name]
+        except KeyError:
+            raise ValueError(f"No registered MemoryObject named {class_name}")
+
+    @staticmethod
+    def _register_string_class_lookup(type_instance: type[Self], replace: bool = False):
+        class_name = type_instance.__name__
+        if MemoryObject.__memory_object_instances__.get(class_name) and not replace:
+            raise NameError(f"You can only have one MemoryObject named {type_instance.__name__}")
+
+        MemoryObject.__memory_object_instances__[class_name] = type_instance
 
     def __getattribute__(self, name):
         attr = super().__getattribute__(name)

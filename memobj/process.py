@@ -1,11 +1,9 @@
 import ctypes
-# these types are cross-platform
 import ctypes.wintypes
 import enum
 import functools
 import platform
 import struct
-import sys
 from typing import Self, Any
 
 # faster than builtin re
@@ -43,6 +41,13 @@ class Process:
             return "Q"
         else:
             return "I"
+
+    @functools.cached_property
+    def pointer_size(self) -> int:
+        if self.process_64_bit:
+            return 8
+        else:
+            return 4
 
     @classmethod
     def from_name(cls, name: str) -> Self:
