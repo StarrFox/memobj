@@ -1,4 +1,3 @@
-import inspect
 from typing import TYPE_CHECKING, Union, Self
 
 from memobj.property import MemoryProperty, Pointer

@@ -1,5 +1,3 @@
-import inspect
-import importlib
 import struct
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Any, Union
@@ -23,6 +21,10 @@ class MemoryProperty(property):
     @cached_property
     def pointer_format_string(self) -> str:
         return self.memory_object.memobj_process.pointer_format_string
+
+    @cached_property
+    def pointer_size(self) -> int:
+        return self.memory_object.memobj_process.pointer_size
 
     def read_formatted_from_offset(self, format_string: str) -> tuple[Any] | Any:
         offset_address = self.memory_object.base_address + self.offset
@@ -73,10 +75,7 @@ class Pointer(MemoryProperty):
             return self.pointed_type
 
         elif isinstance(self.pointed_type, str):
-            typed_object_type = MemoryObject.__memory_object_instances__.get(self.pointed_type)
-
-            if typed_object_type is None:
-                raise ValueError(f"No MemoryObject type named {self.pointed_type}")
+            typed_object_type = MemoryObject._resolve_string_class_lookup(self.pointed_type)
 
             # noinspection PyUnboundLocalVariable
             self.pointed_type = typed_object_type()
@@ -99,29 +98,20 @@ class Pointer(MemoryProperty):
         pass
 
     def memory_size(self) -> int:
-        return 8 if self.memory_object.memobj_process.process_64_bit else 4
+        return self.pointer_size
 
 
 class NullTerminatedString(MemoryProperty):
-    def __init__(self, offset: int | None, max_size: int = 20, encoding: str = "utf-8", pointer: bool = False):
+    def __init__(self, offset: int | None, max_size: int = 20, encoding: str = "utf-8"):
         super().__init__(offset)
         self.max_size = max_size
         self.encoding = encoding
-        self.pointer = pointer
 
     def from_memory(self) -> Any:
-        # TODO: add Pointer property i.e. name: str = Pointer(0x0, NullTerminatedString(...))
-        if self.pointer:
-            pointer = self.read_formatted_from_offset(self.pointer_format_string)
-            string_bytes = self.memory_object.memobj_process.read_memory(
-                pointer,
-                self.max_size
-            )
-        else:
-            string_bytes = self.memory_object.memobj_process.read_memory(
-                self.memory_object.base_address + self.offset,
-                self.max_size,
-            )
+        string_bytes = self.memory_object.memobj_process.read_memory(
+            self.memory_object.base_address + self.offset,
+            self.max_size,
+        )
 
         end = string_bytes.find(b"\x00")
 
@@ -139,23 +129,13 @@ class NullTerminatedString(MemoryProperty):
         if (value_len := len(value)) > self.max_size:
             raise ValueError(f"Value was {value_len} while the max size is {self.max_size}")
 
-        if self.pointer:
-            allocation = self.memory_object.memobj_process.allocate_memory(value_len)
-            self.memory_object.memobj_process.write_memory(allocation, value)
-
-            self.write_formatted_to_offset(self.pointer_format_string, allocation)
-
-        else:
-            self.memory_object.memobj_process.write_memory(
-                self.memory_object.base_address + self.offset,
-                value,
-            )
+        self.memory_object.memobj_process.write_memory(
+            self.memory_object.base_address + self.offset,
+            value,
+        )
 
     def memory_size(self) -> int:
-        if self.pointer:
-            return 8 if self.memory_object.memobj_process.process_64_bit else 4
-        else:
-            return self.max_size
+        return self.max_size
 
 
 class SimpleData(MemoryProperty):
