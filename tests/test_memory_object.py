@@ -42,7 +42,7 @@ def test_simple_data_pointer():
 
     test_instance = Test(address=test_value_address, process=process)
 
-    assert test_instance.other == 23
+    assert test_instance.other.from_memory_deref() == 23
 
 
 def test_nested_object():
@@ -62,7 +62,7 @@ def test_nested_object():
 
     test_instance = Test(address=test_value_address, process=process)
 
-    assert test_instance.other.value == 23
+    assert test_instance.other.from_memory_deref().value == 23
 
 
 def test_nested_object_forward_ref():
@@ -75,11 +75,11 @@ def test_nested_object_forward_ref():
     test_value_address = get_address_of_ctypes_obj(pointer_to_test_value, process.pointer_format_string)
 
     class Test(MemoryObject, replace=True):
-        other: "OtherTest" = Pointer(0x0, "OtherTest")
+        other: Pointer = Pointer(0x0, "OtherTest")
 
     class OtherTest(MemoryObject, replace=True):
         value = SimpleData(0x0, format_string="i")
 
     test_instance = Test(address=test_value_address, process=process)
 
-    assert test_instance.other.value == 23
+    assert test_instance.other.from_memory_deref().value == 23

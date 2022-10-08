@@ -48,6 +48,9 @@ class Pointer(MemoryProperty):
         if Pointer.is_null(addr):
             raise ValueError("null pointer cannot be dereferenced")
 
+        # circular import bs
+        from memobj import MemoryObject
+
         if isinstance(self._pointed_type, MemoryObject):
             self._pointed_type._base_address = addr
             self._pointed_type.memobj_process = self.memory_object.memobj_process
@@ -88,6 +91,9 @@ class Pointer(MemoryProperty):
         addr = self.from_memory()
         if Pointer.is_null(addr):
             raise ValueError("null pointer cannot be dereferenced")
+
+        # circular import bs
+        from memobj import MemoryObject
 
         if isinstance(self._pointed_type, MemoryObject):
             if not isinstance(value, type(self._pointed_type)):
