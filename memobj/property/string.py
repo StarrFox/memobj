@@ -6,7 +6,7 @@ from . import MemoryProperty
 class NullTerminatedString(MemoryProperty):
     def __init__(
             self,
-            offset: int | None,
+            offset: int | None = None,
             search_size: int = 20,
             *,
             encoding: str = "utf-8",

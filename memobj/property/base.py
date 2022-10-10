@@ -17,9 +17,13 @@ class MemoryProperty(property):
     def process(self) -> Union["Process", "WindowsProcess"]:
         return self.memory_object.memobj_process
 
-    @cached_property
+    @property
     def pointer_format_string(self) -> str:
         return self.memory_object.memobj_process.pointer_format_string
+
+    @property
+    def pointer_size(self) -> int:
+        return self.memory_object.memobj_process.pointer_size
 
     def read_formatted_from_offset(self, format_string: str) -> tuple[Any] | Any:
         offset_address = self.memory_object.base_address + self.offset

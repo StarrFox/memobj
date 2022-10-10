@@ -130,4 +130,14 @@ class Pointer(MemoryProperty):
             raise TypeError("pointed-to type is neither MemoryObject nor MemoryProperty")
 
     def memory_size(self) -> int:
-        return 8 if self.memory_object.memobj_process.process_64_bit else 4
+        return self.pointer_size
+
+
+class DereffedPointer(Pointer):
+    def _get_prelude(self, preluder: "MemoryObject"):
+        self.memory_object = preluder
+        return self.from_memory_deref()
+
+    def _set_prelude(self, preluder: "MemoryObject", value):
+        self.memory_object = preluder
+        self.to_memory_deref(value)
