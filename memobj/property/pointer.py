@@ -1,3 +1,4 @@
+from copy import copy
 from typing import TYPE_CHECKING, Any, Union
 
 from . import MemoryProperty
@@ -18,7 +19,11 @@ class Void(MemoryProperty):
 
 
 class Pointer(MemoryProperty):
-    def __init__(self, offset: int | None, pointed_type: Union[str, MemoryProperty, "MemoryObject"]):
+    def __init__(
+            self,
+            offset: int | None,
+            pointed_type: Union[str, MemoryProperty, "MemoryObject", type["MemoryObject"]]
+    ):
         super().__init__(offset)
 
         self._pointed_type = pointed_type
@@ -27,14 +32,16 @@ class Pointer(MemoryProperty):
         self.memory_object = preluder
         return self
 
-    # TODO: what should this do?
     def _set_prelude(self, preluder: "MemoryObject", value):
         self.memory_object = preluder
-        raise NotImplementedError()
+        self.to_memory_deref(value)
 
     @staticmethod
     def is_null(addr: int) -> bool:
         return addr == 0
+
+    def handle_null(self):
+        raise ValueError("null pointer cannot be dereferenced")
 
     def cast(self, new_type: Union[MemoryProperty, "MemoryObject"]) -> "Pointer":
         # New pointer to same address but with changed type.
@@ -45,17 +52,23 @@ class Pointer(MemoryProperty):
 
     def from_memory_deref(self) -> Any:
         addr = self.from_memory()
-        if Pointer.is_null(addr):
-            raise ValueError("null pointer cannot be dereferenced")
+        if self.is_null(addr):
+            return self.handle_null()
 
         # circular import bs
         from memobj import MemoryObject
+        from memobj.object import MemoryObjectMeta
 
         if isinstance(self._pointed_type, MemoryObject):
-            self._pointed_type._base_address = addr
-            self._pointed_type.memobj_process = self.memory_object.memobj_process
+            # this is so returned instance isn't overwritten
+            instance = copy(self._pointed_type)
+            instance._base_address = addr
+            instance.memobj_process = self.memory_object.memobj_process
 
-            return self._pointed_type
+            return instance
+
+        elif type(self._pointed_type) is MemoryObjectMeta:
+            return self._pointed_type(address=addr, process=self.memory_object.memobj_process)
 
         elif isinstance(self._pointed_type, str):
             # noinspection PyProtectedMember
@@ -89,11 +102,12 @@ class Pointer(MemoryProperty):
 
     def to_memory_deref(self, value: Any):
         addr = self.from_memory()
-        if Pointer.is_null(addr):
+        if self.is_null(addr):
             raise ValueError("null pointer cannot be dereferenced")
 
         # circular import bs
         from memobj import MemoryObject
+        from memobj.object import MemoryObjectMeta
 
         if isinstance(self._pointed_type, MemoryObject):
             if not isinstance(value, type(self._pointed_type)):
@@ -105,17 +119,23 @@ class Pointer(MemoryProperty):
             for attribute_name in self._pointed_type.__memory_properties__.keys():
                 setattr(self._pointed_type, attribute_name, getattr(value, attribute_name))
 
+        # TODO: is there a better way to check for this
+        elif type(self._pointed_type) is MemoryObjectMeta:
+            instance = self._pointed_type(address=addr, process=self.memory_object.memobj_process)
+
+            for attribute_name in self._pointed_type.__memory_properties__.keys():
+                setattr(self._pointed_type, attribute_name, getattr(value, attribute_name))
+
         elif isinstance(self._pointed_type, str):
             # noinspection PyProtectedMember
             typed_object_type = MemoryObject._resolve_string_class_lookup(self._pointed_type)
 
-            self._pointed_type = typed_object_type()
+            self._pointed_type = typed_object_type
 
-            self._pointed_type._base_address = addr
-            self._pointed_type.memobj_process = self.memory_object.memobj_process
+            instance = self._pointed_type(address=addr, process=self.memory_object.memobj_process)
 
             for attribute_name in self._pointed_type.__memory_properties__.keys():
-                setattr(self._pointed_type, attribute_name, getattr(value, attribute_name))
+                setattr(instance, attribute_name, getattr(value, attribute_name))
 
         elif isinstance(self._pointed_type, MemoryProperty):
             self._pointed_type.memory_object = MemoryObject(
@@ -141,3 +161,6 @@ class DereffedPointer(Pointer):
     def _set_prelude(self, preluder: "MemoryObject", value):
         self.memory_object = preluder
         self.to_memory_deref(value)
+
+    def handle_null(self):
+        return None
