@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Union, Self
+from typing import TYPE_CHECKING, Union
 
 from memobj.property import MemoryProperty, Pointer
 
@@ -57,14 +57,14 @@ class MemoryObject(metaclass=MemoryObjectMeta):
         return self._base_address
 
     @staticmethod
-    def _resolve_string_class_lookup(class_name: str) -> type[Self]:
+    def _resolve_string_class_lookup(class_name: str) -> type["MemoryObject"]:
         try:
             return MemoryObject.__memory_object_instances__[class_name]
         except KeyError:
             raise ValueError(f"No registered MemoryObject named {class_name}")
 
     @staticmethod
-    def _register_string_class_lookup(type_instance: type[Self], replace: bool = False):
+    def _register_string_class_lookup(type_instance: type["MemoryObject"], replace: bool = False):
         class_name = type_instance.__name__
         if MemoryObject.__memory_object_instances__.get(class_name) and not replace:
             raise NameError(f"You can only have one MemoryObject named {type_instance.__name__}")
