@@ -42,7 +42,7 @@ class Array(MemoryProperty):
             self._element_type.offset = idx * self.element_size()
             elements.append(self._element_type.from_memory())
 
-            return elements
+        return elements
 
     def to_memory(self, value: Any):
         self._element_type.memory_object = MemoryObject(
