@@ -4,7 +4,7 @@ import enum
 import functools
 import platform
 import struct
-from typing import Self, Any
+from typing import Any
 
 # faster than builtin re
 import regex
@@ -50,7 +50,7 @@ class Process:
             return 4
 
     @classmethod
-    def from_name(cls, name: str) -> Self:
+    def from_name(cls, name: str) -> "Process":
         """
         Open a process by name
 
@@ -63,7 +63,7 @@ class Process:
         raise NotImplementedError()
 
     @classmethod
-    def from_id(cls, pid: int) -> Self:
+    def from_id(cls, pid: int) -> "Process":
         """
         Open a process by id
 
@@ -346,7 +346,7 @@ class WindowsProcess(Process):
         return self.system_64_bit and wow_64_process.value == 0
 
     @classmethod
-    def from_name(cls, name: str, *, require_debug: bool = True) -> Self:
+    def from_name(cls, name: str, *, require_debug: bool = True) -> "WindowsProcess":
         import ctypes.wintypes
 
         # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-processentry32
@@ -403,7 +403,7 @@ class WindowsProcess(Process):
         raise ValueError(f"No processes found named {name}; make sure you included the .exe and any capital letters")
 
     @classmethod
-    def from_id(cls, pid: int, *, require_debug: bool = True) -> Self:
+    def from_id(cls, pid: int, *, require_debug: bool = True) -> "WindowsProcess":
         try:
             cls._get_debug_privileges()
         except OSError as error:
