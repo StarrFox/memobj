@@ -5,6 +5,7 @@ import functools
 import platform
 import struct
 from typing import Any
+from pathlib import Path
 
 # faster than builtin re
 import regex
@@ -13,14 +14,14 @@ import regex
 class Process:
     """A connected process"""
 
-    @property
+    @functools.cached_property
     def process_64_bit(self) -> bool:
         """
         If this process is 64 bit
         """
         raise NotImplementedError()
 
-    @property
+    @functools.cached_property
     def python_64_bit(self) -> bool:
         """
         If the current python is 64 bit
@@ -28,12 +29,19 @@ class Process:
         # we can just check the pointer size; 4 = 32, 8 = 64
         return ctypes.sizeof(ctypes.c_void_p) == 8
 
-    @property
+    @functools.cached_property
     def system_64_bit(self) -> bool:
         """
         If the system is 64 bit
         """
         return platform.architecture()[0] == "64bit"
+
+    @functools.cached_property
+    def executable_path(self) -> Path:
+        """
+        Path to the process's executable
+        """
+        raise NotImplementedError()
 
     @functools.cached_property
     def pointer_format_string(self) -> str:
@@ -353,6 +361,20 @@ class WindowsProcess(Process):
 
         # this is the only case where the process is 64 bit
         return self.system_64_bit and wow_64_process.value == 0
+
+    @functools.cached_property
+    def executable_path(self) -> Path:
+        with CheckWindowsOsError():
+            # https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulefilenamea
+            file_name = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+
+            ctypes.windll.kernel32.GetModuleFileNameW(
+                0,
+                ctypes.byref(file_name),
+                ctypes.wintypes.MAX_PATH,
+            )
+
+        return Path(file_name.value)
 
     @classmethod
     def from_name(cls, name: str, *, require_debug: bool = True) -> "WindowsProcess":
