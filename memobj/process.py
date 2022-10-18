@@ -368,7 +368,8 @@ class WindowsProcess(Process):
             # https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulefilenamea
             file_name = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
 
-            ctypes.windll.kernel32.GetModuleFileNameW(
+            ctypes.windll.psapi.GetModuleFileNameExW(
+                self.process_handle,
                 0,
                 ctypes.byref(file_name),
                 ctypes.wintypes.MAX_PATH,
