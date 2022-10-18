@@ -11,8 +11,6 @@ repository = "https://github.com/StarrFox/memobj"
 python = "^3.10"
 regex = "^2022.9.13"
 
-[tool.poetry.dev-dependencies]
-
 [tool.poetry.group.tests.dependencies]
 pytest = "^7.1.3"
 

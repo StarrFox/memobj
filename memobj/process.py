@@ -212,6 +212,15 @@ class WindowsMemoryBasicInformation(ctypes.Structure):
         ]
 
 
+# https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-moduleinfo
+class WindowsModuleInfo(ctypes.Structure):
+    _fields_ = [
+        ("lpBaseOfDll", ctypes.wintypes.LPVOID),
+        ("SizeOfImage", ctypes.wintypes.DWORD),
+        ("EntryPoint", ctypes.wintypes.LPVOID),
+    ]
+
+
 # https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants
 class WindowsMemoryProtection(enum.IntFlag):
     # note: can't read
@@ -221,7 +230,7 @@ class WindowsMemoryProtection(enum.IntFlag):
     PAGE_READWRITE = 0x4
     # note: wacky on write
     PAGE_WRITECOPY = 0x8
-    # note: can't write, can read?
+    # note: can't write, can't read
     PAGE_EXECUTE = 0x10
     # note: can't write
     PAGE_EXECUTE_READ = 0x20
@@ -568,6 +577,65 @@ class WindowsProcess(Process):
 
         return memory_basic_information
 
+    # TODO: check if you actually can't get modules on linux
+    # note: platform dependent
+    def get_modules(self, base_only: bool = False) -> list[WindowsModuleInfo] | WindowsModuleInfo:
+        # TODO: for some reason EnumProcessModulesEx always sets LastError?
+        # with CheckWindowsOsError():
+        # TODO: is it always the psapi dll? check requirments section
+        # https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-enumprocessmodulesex
+        lpcb_needed = ctypes.wintypes.DWORD()
+
+        success = ctypes.windll.psapi.EnumProcessModulesEx(
+            self.process_handle,
+            0,
+            0,
+            ctypes.byref(lpcb_needed),
+            0x3,
+        )
+
+        if success == 0:
+            raise RuntimeError("EnumProcessModulesEx (get size) failed")
+
+        # with CheckWindowsOsError():
+        module_handles_type = ctypes.wintypes.HMODULE * (
+                lpcb_needed.value // ctypes.sizeof(ctypes.wintypes.HMODULE)
+        )
+        module_handles = module_handles_type()
+
+        success = ctypes.windll.psapi.EnumProcessModulesEx(
+            self.process_handle,
+            ctypes.byref(module_handles),
+            lpcb_needed,
+            ctypes.byref(ctypes.wintypes.DWORD()),
+            0x3,
+        )
+
+        if success == 0:
+            raise RuntimeError("EnumProcessModulesEx failed")
+
+        with CheckWindowsOsError():
+            modules = []
+            for module_handle in module_handles:
+                # https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmoduleinformation
+                module_info = WindowsModuleInfo()
+
+                success = ctypes.windll.psapi.GetModuleInformation(
+                    self.process_handle,
+                    ctypes.wintypes.HMODULE(module_handle),
+                    ctypes.byref(module_info),
+                    ctypes.sizeof(module_info),
+                )
+
+                if success == 0:
+                    raise ValueError(f"GetModuleInformation failed for handle {module_handle}")
+
+                if base_only:
+                    return module_info
+
+                modules.append(module_info)
+
+        return modules
 
 # TODO
 # class LinuxProcess(Process):
