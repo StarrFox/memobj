@@ -4,7 +4,7 @@ import enum
 import functools
 import platform
 import struct
-from typing import Any
+from typing import Any, Union
 from pathlib import Path
 
 # faster than builtin re
@@ -127,13 +127,13 @@ class Process:
         """
         raise NotImplementedError()
 
-    def scan_memory(self, pattern: regex.Pattern | bytes, *, module_name: str = None) -> list[int]:
+    def scan_memory(self, pattern: regex.Pattern | bytes, *, module: str = None) -> list[int]:
         """
         Scan memory for a regex pattern
 
         Args:
             pattern: A regex.Pattern or a byte pattern
-            module_name: Name of a module to exclusively search
+            module: Name of a module to exclusively search
 
         Returns:
         A list of addresses that matched
@@ -538,7 +538,23 @@ class WindowsProcess(Process):
             if success == 0:
                 raise ValueError(f"WriteProcessMemory failed for address {address} with bytes {value}")
 
-    def scan_memory(self, pattern: regex.Pattern | bytes, *, module_name: str = None) -> list[int]:
+    def scan_memory(
+            self,
+            pattern: regex.Pattern | bytes,
+            *,
+            module: Union[str, WindowsModuleInfo, True] = None,
+    ) -> list[int]:
+        """
+        Scan memory for a regex pattern
+
+        Args:
+            pattern: A regex.Pattern or a byte pattern
+            module: Name of a module to exclusively search or a module to search for
+            (True is shortcut for base module)
+
+        Returns:
+        A list of addresses that matched
+        """
         region_start = 0
 
         # Finding information on this is quite the moment
@@ -546,6 +562,16 @@ class WindowsProcess(Process):
             max_size = 0x7FFFFFFF0000
         else:
             max_size = 0x7FFF0000
+
+        if module is not None:
+            if module is True:
+                module = self.get_modules(True)
+
+            else:
+                module = self.get_module_named(module)
+
+            region_start = module.lpBaseOfDll
+            max_size = region_start + module.SizeOfImage
 
         matches = []
         while region_start < max_size:
@@ -659,6 +685,31 @@ class WindowsProcess(Process):
                 modules.append(module_info)
 
         return modules
+
+    def get_module_name(self, module: WindowsModuleInfo) -> str:
+        with CheckWindowsOsError():
+            # https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmodulebasenamew
+            # I just assume MAX_PATH is good enough
+            name_buffer = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+
+            success = ctypes.windll.psapi.GetModuleBaseNameW(
+                self.process_handle,
+                ctypes.c_void_p(module.lpBaseOfDll),
+                ctypes.byref(name_buffer),
+                ctypes.wintypes.MAX_PATH,
+            )
+
+            if success == 0:
+                raise ValueError(f"GetModuleBaseNameW failed for {module}")
+
+        return name_buffer.value
+
+    def get_module_named(self, name: str) -> WindowsModuleInfo:
+        for module in self.get_modules():
+            if self.get_module_name(module) == name:
+                return module
+
+        raise ValueError(f"No modules named {name}")
 
 # TODO
 # class LinuxProcess(Process):
