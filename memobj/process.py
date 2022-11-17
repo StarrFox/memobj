@@ -542,7 +542,7 @@ class WindowsProcess(Process):
             self,
             pattern: regex.Pattern | bytes,
             *,
-            module: Union[str, WindowsModuleInfo, True] = None,
+            module: Union[str, WindowsModuleInfo, bool] = None,
     ) -> list[int]:
         """
         Scan memory for a regex pattern
