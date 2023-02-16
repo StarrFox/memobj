@@ -89,6 +89,10 @@ class Pointer(MemoryProperty):
             )
             self._pointed_type.offset = 0
 
+            if isinstance(self._pointed_type, Pointer):
+                # create a copy of the object so it can be reused by this instance
+                return copy(self._pointed_type)
+
             return self._pointed_type.from_memory()
 
         else:
@@ -156,7 +160,13 @@ class Pointer(MemoryProperty):
 class DereffedPointer(Pointer):
     def _get_prelude(self, preluder: "MemoryObject"):
         self.memory_object = preluder
-        return self.from_memory_deref()
+        result = self.from_memory_deref()
+
+        # TODO: test if this works
+        if isinstance(result, DereffedPointer):
+            return result._get_prelude(result.memory_object)
+
+        return result
 
     def _set_prelude(self, preluder: "MemoryObject", value):
         self.memory_object = preluder
