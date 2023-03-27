@@ -9,7 +9,7 @@ repository = "https://github.com/StarrFox/memobj"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-regex = "^2022.9.13"
+regex = ">=2022.9.13,<2024.0.0"
 
 [tool.poetry.group.tests.dependencies]
 pytest = "^7.1.3"
