@@ -1,11 +1,14 @@
 # memobj
+
 A library for defining objects in memory
 
 ## installing
+
 python 3.11+ only!
 `pip install memobj`
 
 ## usage
+
 ```python
 import os
 
@@ -27,5 +30,6 @@ print(my_int.value)
 ```
 
 ## support
+
 discord
-https://discord.gg/7hBStdXkyR
+<https://discord.gg/7hBStdXkyR>

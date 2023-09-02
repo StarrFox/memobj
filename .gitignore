@@ -127,3 +127,11 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# editor garbage
+.idea
+.vscode
+
+# nix
+result
+.direnv
