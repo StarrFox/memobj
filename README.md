@@ -4,10 +4,9 @@ A library for defining objects in memory
 
 ## installing
 
-python 3.11+ only!
 `pip install memobj`
 
-## usage
+## example
 
 ```python
 import os
@@ -17,6 +16,7 @@ from memobj.property import Signed4
 
 
 class PythonIntObject(MemoryObject):
+    # note: this offset might be different in future python versions
     value: int = Signed4(24)
 
 
@@ -31,5 +31,4 @@ print(my_int.value)
 
 ## support
 
-discord
-<https://discord.gg/7hBStdXkyR>
+discord: <https://discord.gg/7hBStdXkyR>
