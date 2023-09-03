@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 from memobj.property import MemoryProperty, Pointer
 
@@ -42,10 +42,10 @@ class MemoryObject(metaclass=MemoryObjectMeta):
 
     def __init__(
             self,
-            offset: int = None,
+            offset: int | None = None,
             *,
-            address: int = None,
-            process: Union["Process", "WindowsProcess"] = None,
+            address: int | None = None,
+            process: "Process | WindowsProcess | None" = None,
     ):
         self._offset = offset
         self._base_address = address

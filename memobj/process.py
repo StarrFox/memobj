@@ -4,7 +4,8 @@ import enum
 import functools
 import platform
 import struct
-from typing import Any, Union
+import typing
+from typing import Any
 from pathlib import Path
 
 # faster than builtin re
@@ -127,7 +128,7 @@ class Process:
         """
         raise NotImplementedError()
 
-    def scan_memory(self, pattern: regex.Pattern | bytes, *, module: str = None) -> list[int]:
+    def scan_memory(self, pattern: regex.Pattern | bytes, *, module: str | None = None) -> list[int]:
         """
         Scan memory for a regex pattern
 
@@ -459,7 +460,7 @@ class WindowsProcess(Process):
         return cls(process_handle)
 
     # noinspection PyMethodOverriding
-    def allocate_memory(self, size: int, *, preferred_start: int = None) -> int:
+    def allocate_memory(self, size: int, *, preferred_start: int | None = None) -> int:
         """
         Allocate <size> amount of memory in the process
 
@@ -542,7 +543,7 @@ class WindowsProcess(Process):
             self,
             pattern: regex.Pattern | bytes,
             *,
-            module: Union[str, WindowsModuleInfo, bool] = None,
+            module: str | WindowsModuleInfo | bool | None = None,
     ) -> list[int]:
         """
         Scan memory for a regex pattern
@@ -565,7 +566,13 @@ class WindowsProcess(Process):
 
         if module is not None:
             if module is True:
-                module = self.get_modules(True)
+                module = typing.cast(WindowsModuleInfo, self.get_modules(True))
+
+            elif module is False:
+                raise ValueError("Module cannot be False")
+
+            elif isinstance(module, WindowsModuleInfo):
+                pass
 
             else:
                 module = self.get_module_named(module)
@@ -626,6 +633,7 @@ class WindowsProcess(Process):
 
         return memory_basic_information
 
+    # TODO: add typing overload that tells what True and False do
     # TODO: check if you actually can't get modules on linux
     # note: platform dependent
     def get_modules(self, base_only: bool = False) -> list[WindowsModuleInfo] | WindowsModuleInfo:
@@ -664,7 +672,7 @@ class WindowsProcess(Process):
             raise RuntimeError("EnumProcessModulesEx failed")
 
         with CheckWindowsOsError():
-            modules = []
+            modules: list[WindowsModuleInfo] = []
             for module_handle in module_handles:
                 # https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmoduleinformation
                 module_info = WindowsModuleInfo()
@@ -679,7 +687,7 @@ class WindowsProcess(Process):
                 if success == 0:
                     raise ValueError(f"GetModuleInformation failed for handle {module_handle}")
 
-                if base_only:
+                if base_only is True:
                     return module_info
 
                 modules.append(module_info)
@@ -705,7 +713,7 @@ class WindowsProcess(Process):
         return name_buffer.value
 
     def get_module_named(self, name: str) -> WindowsModuleInfo:
-        for module in self.get_modules():
+        for module in self.get_modules(): # type: ignore
             if self.get_module_name(module) == name:
                 return module
 

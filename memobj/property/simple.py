@@ -5,9 +5,10 @@ from . import MemoryProperty
 
 
 class SimpleData(MemoryProperty):
-    format_string: str = None
+    format_string: str | None = None
 
-    def __init__(self, offset: int | None = None, format_string: str = None):
+    # TODO: why can format_string be None here?
+    def __init__(self, offset: int | None = None, format_string: str | None = None):
         super().__init__(offset)
         if format_string is not None:
             self.format_string = format_string
