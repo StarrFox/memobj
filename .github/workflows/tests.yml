@@ -7,11 +7,13 @@ on:
       - "memobj/**"
       - "tests/**"
       - ".github/workflows/tests.yml"
+      - "*.lock"
   pull_request:
     paths:
       - "memobj/**"
       - "tests/**"
       - ".github/workflows/tests.yml"
+      - "*.lock"
 
 jobs:
   test:
