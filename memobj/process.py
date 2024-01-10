@@ -4,6 +4,7 @@ import enum
 import functools
 import platform
 import struct
+import typing
 from typing import Any, Union
 from pathlib import Path
 
@@ -127,7 +128,7 @@ class Process:
         """
         raise NotImplementedError()
 
-    def scan_memory(self, pattern: regex.Pattern | bytes, *, module: str = None) -> list[int]:
+    def scan_memory(self, pattern: regex.Pattern | bytes, *, module: str | None = None) -> list[int]:
         """
         Scan memory for a regex pattern
 
@@ -458,8 +459,7 @@ class WindowsProcess(Process):
 
         return cls(process_handle)
 
-    # noinspection PyMethodOverriding
-    def allocate_memory(self, size: int, *, preferred_start: int = None) -> int:
+    def allocate_memory(self, size: int, *, preferred_start: int | None = None) -> int: # type: ignore
         """
         Allocate <size> amount of memory in the process
 
@@ -472,10 +472,10 @@ class WindowsProcess(Process):
         """
         with CheckWindowsOsError():
             if preferred_start is not None:
-                preferred_start = ctypes.cast(preferred_start, ctypes.c_void_p)
+                preferred_start: ctypes.c_void_p = ctypes.cast(preferred_start, ctypes.c_void_p)
 
             else:
-                preferred_start = 0
+                preferred_start = 0  # type: ignore (null pointer)
 
             # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex
             allocation = ctypes.windll.kernel32.VirtualAllocEx(
@@ -542,7 +542,7 @@ class WindowsProcess(Process):
             self,
             pattern: regex.Pattern | bytes,
             *,
-            module: Union[str, WindowsModuleInfo, bool] = None,
+            module: Union[str, WindowsModuleInfo, bool, None] = None,
     ) -> list[int]:
         """
         Scan memory for a regex pattern
@@ -555,7 +555,7 @@ class WindowsProcess(Process):
         Returns:
         A list of addresses that matched
         """
-        region_start = 0
+        region_start: int = 0
 
         # Finding information on this is quite the moment
         if self.process_64_bit:
@@ -566,6 +566,12 @@ class WindowsProcess(Process):
         if module is not None:
             if module is True:
                 module = self.get_modules(True)
+
+            elif module is False:
+                raise ValueError("module can only be True")
+
+            elif isinstance(module, WindowsModuleInfo):
+                pass
 
             else:
                 module = self.get_module_named(module)
@@ -625,6 +631,12 @@ class WindowsProcess(Process):
                 raise ValueError(f"VirtualQueryEx failed for address {address}")
 
         return memory_basic_information
+
+    @typing.overload
+    def get_modules(self, base_only: typing.Literal[False] = False) -> list[WindowsModuleInfo]: ...
+
+    @typing.overload
+    def get_modules(self, base_only: typing.Literal[True]) -> WindowsModuleInfo: ...
 
     # TODO: check if you actually can't get modules on linux
     # note: platform dependent
