@@ -5,7 +5,7 @@ import functools
 import platform
 import struct
 import typing
-from typing import Any, Union
+from typing import Any, Union, Self
 from pathlib import Path
 
 # faster than builtin re
@@ -59,7 +59,7 @@ class Process:
             return 4
 
     @classmethod
-    def from_name(cls, name: str) -> "Process":
+    def from_name(cls, name: str) -> Self:
         """
         Open a process by name
 
@@ -72,7 +72,7 @@ class Process:
         raise NotImplementedError()
 
     @classmethod
-    def from_id(cls, pid: int) -> "Process":
+    def from_id(cls, pid: int) -> Self:
         """
         Open a process by id
 
@@ -261,7 +261,6 @@ class WindowsProcess(Process):
     def __init__(self, process_handle: int):
         self.process_handle = process_handle
 
-    # noinspection PyPep8Naming
     @staticmethod
     def _get_debug_privileges():
         # https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-luid
@@ -379,7 +378,7 @@ class WindowsProcess(Process):
         return Path(file_name.value)
 
     @classmethod
-    def from_name(cls, name: str, *, require_debug: bool = True) -> "WindowsProcess":
+    def from_name(cls, name: str, *, require_debug: bool = True) -> Self:
         import ctypes.wintypes
 
         # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-processentry32
@@ -436,7 +435,7 @@ class WindowsProcess(Process):
         raise ValueError(f"No processes found named {name}; make sure you included the .exe and any capital letters")
 
     @classmethod
-    def from_id(cls, pid: int, *, require_debug: bool = True) -> "WindowsProcess":
+    def from_id(cls, pid: int, *, require_debug: bool = True) -> Self:
         try:
             cls._get_debug_privileges()
         except OSError as error:
@@ -455,7 +454,7 @@ class WindowsProcess(Process):
             )
 
             if process_handle == 0:
-                raise ValueError(f"OpenProcess returned null with process id {pid}")
+                raise ValueError(f"OpenProcess returned null for process id {pid}")
 
         return cls(process_handle)
 
@@ -476,6 +475,8 @@ class WindowsProcess(Process):
 
             else:
                 preferred_start = 0  # type: ignore (null pointer)
+
+            ctypes.windll.kernel32.VirtualAllocEx.restype = ctypes.c_size_t
 
             # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex
             allocation = ctypes.windll.kernel32.VirtualAllocEx(
@@ -520,7 +521,7 @@ class WindowsProcess(Process):
             )
 
             if success == 0:
-                raise ValueError(f"ReadProcessMemory failed for address {address} with size {size}")
+                raise ValueError(f"ReadProcessMemory failed for address {hex(address)} with size {size}")
 
         return byte_buffer.raw
 
@@ -536,7 +537,7 @@ class WindowsProcess(Process):
             )
 
             if success == 0:
-                raise ValueError(f"WriteProcessMemory failed for address {address} with bytes {value}")
+                raise ValueError(f"WriteProcessMemory failed for address {hex(address)}")
 
     def scan_memory(
             self,

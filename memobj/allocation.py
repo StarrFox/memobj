@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Self
 
 
 if TYPE_CHECKING:
-    from .process import Process
+    from memobj.process import Process
 
 
 class Allocation:
@@ -20,6 +20,10 @@ class Allocation:
     
     def __exit__(self, *_):
         self.free()
+
+    @property
+    def closed(self) -> bool:
+        return self._is_closed
 
     def free(self):
         if self._is_closed:
@@ -52,6 +56,10 @@ class Allocator:
     def __exit__(self, *_):
         self.close()
 
+    @property
+    def closed(self) -> bool:
+        return self._is_closed
+
     def allocate(self, size: int) -> Allocation:
         address = self.process.allocate_memory(size)
         allocation = Allocation(address, self.process)
@@ -63,7 +71,8 @@ class Allocator:
             raise ValueError("Cannot close an already closed allocator")
         
         for allocation in self.allocations:
-            allocation.free()
+            if not allocation.closed:
+                allocation.free()
 
         self.allocations = []
         self._is_closed = True
