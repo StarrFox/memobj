@@ -141,6 +141,27 @@ class Process:
         """
         raise NotImplementedError()
 
+    def scan_one(self, pattern: regex.Pattern | bytes, *, module: str | None = None) -> int:
+        """
+        Scan memory for a regex pattern and error if one address was not found
+
+        Args:
+            pattern: A regex.Pattern or a byte pattern
+            module: Name of a module to exclusively search
+
+        Returns:
+        Address found
+        """
+        results = self.scan_memory(pattern, module=module)
+        
+        if result_len := len(results) == 0:
+            raise ValueError(F"No matches found for pattern {pattern}")
+        
+        elif result_len > 1:
+            raise ValueError(f"Multiple matches found for pattern {pattern}")
+        
+        return results[0]
+
     def read_formatted(self, address: int, format_string: str) -> tuple[Any] | Any:
         """
         Read formatted bytes from memory, format_string is passed directly to struct.unpack

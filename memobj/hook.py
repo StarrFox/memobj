@@ -141,16 +141,7 @@ class JmpHook(Hook):
 
     def hook(self):
         assert self.PATTERN is not None
-        matched_addresses = self.process.scan_memory(self.PATTERN, module=self.MODULE)
-        
-        # TODO: add this repetitive code to Process
-        if matched_len := len(matched_addresses) == 0:
-            raise ValueError(f"No matches found for pattern of {self.__class__.__name__}")
-
-        elif matched_len > 1:
-            raise ValueError(f"Multiple results ({matched_len}) for pattern of {self.__class__.__name__}")
-
-        target_address = matched_addresses[0]
+        target_address = self.process.scan_one(self.PATTERN, module=self.MODULE)
 
         tail, noops = self._get_hook_tail(target_address)
 
@@ -215,7 +206,6 @@ class JmpHook(Hook):
 
         decoder = Decoder(64, search_bytes, ip=jump_address)
 
-        # TODO: add sanity checks for instructions like ret and jmp
         for instruction in decoder:
             # NOTE: this is not a None check, Instruction has special bool() handling
             if not instruction:
