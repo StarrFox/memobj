@@ -221,6 +221,31 @@ class JmpHook(Hook):
             if not instruction:
                 raise RuntimeError(f"Got unknown instruction in bytes {position=} {search_bytes=}")
 
+            control_flow = instruction.flow_control
+            
+            match control_flow:
+                case FlowControl.NEXT:
+                    pass
+                case FlowControl.RETURN:
+                    if not self.FUNCTION_TOP:
+                        raise ValueError("Original code contains a return and we've pushed rax onto stack")
+                case FlowControl.UNCONDITIONAL_BRANCH | FlowControl.INDIRECT_BRANCH | FlowControl.CONDITIONAL_BRANCH:
+                    near_target = instruction.near_branch_target
+                    
+                    if near_target == 0:
+                        raise ValueError(f"Original code contains a far branch: {instruction}")
+
+                    # TODO: try and fix the jump instead
+                    if not near_target < self._jump_needed - position:
+                        raise ValueError(f"Original code contains a near jump outside of captured code: {instruction}")
+
+                # TODO: figure out how xbegin works
+                case FlowControl.XBEGIN_XABORT_XEND:
+                    pass
+                
+                case FlowControl.EXCEPTION:
+                    raise ValueError(f"Could not decode flow control of instruction: {instruction}")
+
             original_instructions.append(instruction)
             position += instruction.len
 
@@ -251,61 +276,3 @@ class JmpHook(Hook):
 
     def get_code(self, tail: list[Instruction]) -> list[Instruction]:
         raise NotImplemented()
-
-
-if __name__ == "__main__":
-    from iced_x86 import MemoryOperand
-    from memobj import WindowsProcess
-    
-    class TestHook(JmpHook):
-        PATTERN = rb"\x8D\x04\x11\xC3"
-        MODULE = "testapp.exe"
-        
-        def get_code(self, tail: list[Instruction]) -> list[Instruction]:
-            rcx_cache = self.allocate_variable("rcx_cache", 8)
-            instructions = [
-                Instruction.create_reg(Code.PUSH_R64, Register.RAX),
-                Instruction.create_reg_reg(
-                    Code.MOV_R64_RM64,
-                    Register.RAX,
-                    Register.RCX,
-                ), 
-                Instruction.create_mem_reg(
-                    Code.MOV_MOFFS64_RAX,
-                    MemoryOperand(displ=rcx_cache.address, displ_size=8),
-                    Register.RAX,
-                ),
-                Instruction.create_reg(Code.POP_R64, Register.RAX),
-            ]
-
-            return instructions + tail
-
-    process = WindowsProcess.from_name("testapp.exe")
-    hook = TestHook(process)
-    variables = hook.activate()
-    
-    rcx_cache = variables["rcx_cache"]
-    
-    old = 0
-    
-    import time
-    
-    while True:
-        new = process.read_formatted(rcx_cache.address, "<i")
-        if new != old:
-            old = new
-            print(f"{new=}")
-            break
-        
-        time.sleep(0.5)
-
-    input("enter to exit")
-
-    hook.deactivate()
-    
-    #_debug_print_disassembly(b"\x48\xA3\x00\x00\xDC\x04\xD6\x02\x00\x00", 0)
-    
-    #process.write_memory(0x7FF6BA341070, b"\x8D\x04\x11\xC3\x90")
-    
-    # alloc = process.allocate_memory(1000)
-    # print(f"{hex(alloc)=}")
