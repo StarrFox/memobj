@@ -122,7 +122,6 @@ class Hook:
 class JmpHook(Hook):
     PATTERN: regex.Pattern | bytes | None = None
     MODULE: str | None = None
-    ALLOCATION_SIZE: int = 1_000
     FUNCTION_TOP: bool = True
 
     def __init__(self, process: "Process"):
@@ -144,9 +143,9 @@ class JmpHook(Hook):
         target_address = self.process.scan_one(self.PATTERN, module=self.MODULE)
 
         tail, noops = self._get_hook_tail(target_address)
-
-        hook_allocation = self.allocate_variable("hook_site", self.ALLOCATION_SIZE)
         hook_instructions = self.get_code(tail)
+        allocation_size = sum(map(len, hook_instructions))
+        hook_allocation = self.allocate_variable("hook_site", allocation_size)
         hook_code = instructions_to_code(hook_instructions, hook_allocation.address)
         self.process.write_memory(hook_allocation.address, hook_code)
 
