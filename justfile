@@ -12,9 +12,11 @@ test:
 publish:
     poetry publish --build
 
-# bump version
-bump type: && create-tag
+# does a version bump commit
+bump-commit type: && create-tag
     poetry version {{type}}
+    git commit -am "$(poetry version | awk '{print $2}' | xargs echo "bump to")"
+    git push
 
 # creates a new tag for the current version
 create-tag:
