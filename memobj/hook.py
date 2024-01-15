@@ -2,8 +2,9 @@ from typing import TYPE_CHECKING, Callable, Any
 from logging import getLogger
 from functools import cached_property
 
-from iced_x86 import Instruction, Decoder, Code, Register, BlockEncoder, FlowControl
 import regex
+from iced_x86 import Instruction, Decoder, Code, MemoryOperand, Register, BlockEncoder, FlowControl
+from iced_x86._iced_x86_py import Register as RegisterType
 
 from memobj.allocation import Allocator, Allocation
 
@@ -48,6 +49,14 @@ def instructions_to_code(
     encoder = BlockEncoder(bitness)
     encoder.add_many(instructions)
     return encoder.encode(instruction_pointer)
+
+
+def get_register_name(register: RegisterType) -> str:
+    for name, value in Register.__dict__.items():
+        if register == value:
+            return name
+
+    raise ValueError(f"{register} name could not be found")
 
 
 class Hook:
@@ -236,7 +245,7 @@ class JmpHook(Hook):
                     raise ValueError(f"Could not decode flow control of instruction: {instruction}")
 
             original_instructions.append(instruction)
-            position += instruction.len
+            position += len(instruction)
 
             if position >= self._jump_needed:
                 # - 1 on position is so the pop rax is run, - (position - needed) is for the no ops
@@ -252,11 +261,8 @@ class JmpHook(Hook):
                 noops = 0
                 if position > self._jump_needed:
                     noops = position - self._jump_needed
-                    # for _ in range(position - _HOOK_JUMP_NEEDED):
-                    #     jump_back_instructions.append(Instruction.create(Code.NOPD))
 
                 original_instructions += jump_back_instructions
-
                 self._original_code = (jump_address, search_bytes[:position])
 
                 return original_instructions, noops
@@ -265,3 +271,62 @@ class JmpHook(Hook):
 
     def get_code(self, tail: list[Instruction]) -> list[Instruction]:
         raise NotImplemented()
+
+
+# NOTE: this registertype is kinda mid, we may need to provide our own
+def create_capture_hook(
+    pattern: regex.Pattern | bytes,
+    module: str,
+    *,
+    registers: set[RegisterType]
+) -> type[JmpHook]:
+    
+    for register in registers:
+        if register == Register.RAX:
+            rax_register = True
+            break
+    else:
+        rax_register = False
+
+    if rax_register:
+        registers.remove(Register.RAX)
+
+    class CaptureHook(JmpHook):
+        PATTERN = pattern
+        MODULE = module
+
+        def get_code(self, tail: list[Instruction]) -> list[Instruction]:
+            instructions: list[Instruction] = [Instruction.create_reg(Code.PUSH_R64, Register.RAX)]
+
+            # we need to get rax first since it's used to mov the rest
+            if rax_register:
+                rax_capture = self.allocate_variable("RAX_capture", 8)
+                instructions.append(
+                    Instruction.create_mem_reg(
+                        Code.MOV_MOFFS64_RAX,
+                        MemoryOperand(displ=rax_capture.address, displ_size=8),
+                        Register.RAX,
+                    )
+                )
+            
+            for register in registers:
+                name = get_register_name(register)
+                capture = self.allocate_variable(f"{name}_capture", 8)
+                instructions += [
+                    Instruction.create_reg_reg(
+                        Code.MOV_R64_RM64,
+                        Register.RAX,
+                        register,
+                    ),
+                    Instruction.create_mem_reg(
+                        Code.MOV_MOFFS64_RAX,
+                        MemoryOperand(displ=capture.address, displ_size=8),
+                        Register.RAX,
+                    ),
+                ]
+
+            instructions.append(Instruction.create_reg(Code.POP_R64, Register.RAX))
+
+            return instructions + tail
+
+    return CaptureHook
