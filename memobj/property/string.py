@@ -18,8 +18,8 @@ class NullTerminatedString(MemoryProperty):
         self.ignore_errors = ignore_errors
 
     def from_memory(self) -> Any:
-        data = self.memory_object.memobj_process.read_memory(
-            self.memory_object.base_address + self.offset,
+        data = self.process.read_memory(
+            self.offset_address,
             self.search_size,
         )
 
@@ -42,8 +42,8 @@ class NullTerminatedString(MemoryProperty):
         if (value_len := len(value)) > self.search_size:
             raise ValueError(f"Value was {value_len} while the search_size size is {self.search_size}")
 
-        self.memory_object.memobj_process.write_memory(
-            self.memory_object.base_address + self.offset,
+        self.process.write_memory(
+            self.offset_address,
             value,
         )
 

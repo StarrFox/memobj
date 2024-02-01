@@ -1,4 +1,3 @@
-from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Any, Union
 
 
@@ -15,23 +14,31 @@ class MemoryProperty(property):
 
     @property
     def process(self) -> Union["Process", "WindowsProcess"]:
+        assert self.memory_object is not None
+        assert self.memory_object.memobj_process is not None
         return self.memory_object.memobj_process
 
     @property
+    def offset_address(self) -> int:
+        if self.offset is None:
+            raise ValueError("Offset cannot be None")
+        
+        assert self.memory_object is not None
+        return self.memory_object.base_address + self.offset
+
+    @property
     def pointer_format_string(self) -> str:
-        return self.memory_object.memobj_process.pointer_format_string
+        return self.process.pointer_format_string
 
     @property
     def pointer_size(self) -> int:
-        return self.memory_object.memobj_process.pointer_size
+        return self.process.pointer_size
 
     def read_formatted_from_offset(self, format_string: str) -> tuple[Any] | Any:
-        offset_address = self.memory_object.base_address + self.offset
-        return self.memory_object.memobj_process.read_formatted(offset_address, format_string)
+        return self.process.read_formatted(self.offset_address, format_string)
 
     def write_formatted_to_offset(self, format_string: str, value: tuple[Any] | Any):
-        offset_address = self.memory_object.base_address + self.offset
-        self.memory_object.memobj_process.write_formatted(offset_address, format_string, value)
+        self.process.write_formatted(self.offset_address, format_string, value)
 
     def _get_prelude(self, preluder: "MemoryObject"):
         self.memory_object = preluder

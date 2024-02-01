@@ -34,8 +34,8 @@ class Array(MemoryProperty):
         elements = []
 
         self._element_type.memory_object = MemoryObject(
-            address=self.memory_object.base_address + self.offset,
-            process=self.memory_object.memobj_process,
+            address=self.offset_address,
+            process=self.process,
         )
 
         for idx in range(self.element_count()):
@@ -46,8 +46,8 @@ class Array(MemoryProperty):
 
     def to_memory(self, value: Any):
         self._element_type.memory_object = MemoryObject(
-            address=self.memory_object.base_address + self.offset,
-            process=self.memory_object.memobj_process,
+            address=self.offset_address,
+            process=self.process,
         )
 
         for idx, element in enumerate(value):

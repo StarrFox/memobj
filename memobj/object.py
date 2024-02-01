@@ -18,7 +18,7 @@ class MemoryObjectMeta(type):
 
         replace = kwargs.pop("replace", False)
 
-        memory_object._register_string_class_lookup(new_instance, replace)
+        memory_object._register_string_class_lookup(new_instance, replace)  # type: ignore
 
         __memory_objects__ = {}
         __memory_properties__ = {}
@@ -28,8 +28,8 @@ class MemoryObjectMeta(type):
             elif isinstance(_type, MemoryProperty):
                 __memory_properties__[name] = _type
 
-        new_instance.__memory_objects__ = __memory_objects__
-        new_instance.__memory_properties__ = __memory_properties__
+        new_instance.__memory_objects__ = __memory_objects__  # type: ignore
+        new_instance.__memory_properties__ = __memory_properties__  # type: ignore
 
         return new_instance
 
@@ -56,7 +56,7 @@ class MemoryObject(metaclass=MemoryObjectMeta):
         self._address_provider = address_provider
         self.memobj_process = process
 
-    # TODO: should this be named something else to prevent collisions with properties
+    # TODO: should this be named something else to prevent collisions with properties?
     @property
     def base_address(self) -> int:
         if self._address_provider is not None:
@@ -91,6 +91,9 @@ class MemoryObject(metaclass=MemoryObjectMeta):
 
         if isinstance(self.__memory_properties__[name], Pointer):
             return attr
+
+        if attr._offset is None:
+            raise ValueError("Offset not set")
 
         attr._base_address = self.base_address + attr._offset
         attr.memobj_process = self.memobj_process
