@@ -1,3 +1,4 @@
+import typing
 from typing import TYPE_CHECKING, Union, Callable
 
 from memobj.property import MemoryProperty, Pointer
@@ -83,19 +84,20 @@ class MemoryObject(metaclass=MemoryObjectMeta):
 
         MemoryObject.__memory_object_instances__[class_name] = type_instance
 
-    def __getattribute__(self, name):
-        attr = super().__getattribute__(name)
+    if not TYPE_CHECKING:
+        def __getattribute__(self, name):
+            attr = super().__getattribute__(name)
 
-        if not isinstance(attr, MemoryObject):
+            if not isinstance(attr, MemoryObject):
+                return attr
+
+            if isinstance(self.__memory_properties__[name], Pointer):
+                return attr
+
+            if attr._offset is None:
+                raise ValueError("Offset not set")
+
+            attr._base_address = self.base_address + attr._offset
+            attr.memobj_process = self.memobj_process
+
             return attr
-
-        if isinstance(self.__memory_properties__[name], Pointer):
-            return attr
-
-        if attr._offset is None:
-            raise ValueError("Offset not set")
-
-        attr._base_address = self.base_address + attr._offset
-        attr.memobj_process = self.memobj_process
-
-        return attr
