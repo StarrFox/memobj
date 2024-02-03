@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Callable
 
 from memobj.property import MemoryProperty, Pointer
 
@@ -18,7 +18,7 @@ class MemoryObjectMeta(type):
 
         replace = kwargs.pop("replace", False)
 
-        memory_object._register_string_class_lookup(new_instance, replace)
+        memory_object._register_string_class_lookup(new_instance, replace)  # type: ignore
 
         __memory_objects__ = {}
         __memory_properties__ = {}
@@ -28,8 +28,8 @@ class MemoryObjectMeta(type):
             elif isinstance(_type, MemoryProperty):
                 __memory_properties__[name] = _type
 
-        new_instance.__memory_objects__ = __memory_objects__
-        new_instance.__memory_properties__ = __memory_properties__
+        new_instance.__memory_objects__ = __memory_objects__  # type: ignore
+        new_instance.__memory_properties__ = __memory_properties__  # type: ignore
 
         return new_instance
 
@@ -42,18 +42,30 @@ class MemoryObject(metaclass=MemoryObjectMeta):
 
     def __init__(
             self,
-            offset: int = None,
+            offset: Union[int, None] = None,
             *,
-            address: int = None,
-            process: Union["Process", "WindowsProcess"] = None,
+            address: Union[int, None] = None,
+            address_provider: Union[Callable[[], int], None] = None,
+            process: Union["Process", "WindowsProcess", None] = None,
     ):
+        if address is not None and address_provider is not None:
+            raise ValueError("both address and address_provider cannot be provided")
+
         self._offset = offset
         self._base_address = address
+        self._address_provider = address_provider
         self.memobj_process = process
 
-    # TODO: should this be named something else to prevent collisions with properties
+    # TODO: should this be named something else to prevent collisions with properties?
     @property
-    def base_address(self):
+    def base_address(self) -> int:
+        if self._address_provider is not None:
+            return self._address_provider()
+
+        # the property-like usage
+        if self._base_address is None:
+            raise ValueError("Uninitialized memoryobject did not receieve an address")
+
         return self._base_address
 
     @staticmethod
@@ -79,6 +91,9 @@ class MemoryObject(metaclass=MemoryObjectMeta):
 
         if isinstance(self.__memory_properties__[name], Pointer):
             return attr
+
+        if attr._offset is None:
+            raise ValueError("Offset not set")
 
         attr._base_address = self.base_address + attr._offset
         attr.memobj_process = self.memobj_process

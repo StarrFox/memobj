@@ -63,12 +63,12 @@ class Pointer(MemoryProperty):
             # this is so returned instance isn't overwritten
             instance = copy(self._pointed_type)
             instance._base_address = addr
-            instance.memobj_process = self.memory_object.memobj_process
+            instance.memobj_process = self.process
 
             return instance
 
         elif type(self._pointed_type) is MemoryObjectMeta:
-            return self._pointed_type(address=addr, process=self.memory_object.memobj_process)
+            return self._pointed_type(address=addr, process=self.process)
 
         elif isinstance(self._pointed_type, str):
             # noinspection PyProtectedMember
@@ -77,7 +77,7 @@ class Pointer(MemoryProperty):
             self._pointed_type = typed_object_type()
 
             self._pointed_type._base_address = addr
-            self._pointed_type.memobj_process = self.memory_object.memobj_process
+            self._pointed_type.memobj_process = self.process
 
             return self._pointed_type
 
@@ -85,7 +85,7 @@ class Pointer(MemoryProperty):
             # create a mock object at the address
             self._pointed_type.memory_object = MemoryObject(
                 address=addr,
-                process=self.memory_object.memobj_process,
+                process=self.process,
             )
             self._pointed_type.offset = 0
 
@@ -114,14 +114,14 @@ class Pointer(MemoryProperty):
                 raise TypeError(f"{value!r} incompatible with {self._pointed_type!r}")
 
             self._pointed_type._base_address = addr
-            self._pointed_type.memobj_process = self.memory_object.memobj_process
+            self._pointed_type.memobj_process = self.process
 
             for attribute_name in self._pointed_type.__memory_properties__.keys():
                 setattr(self._pointed_type, attribute_name, getattr(value, attribute_name))
 
         # TODO: is there a better way to check for this
         elif type(self._pointed_type) is MemoryObjectMeta:
-            instance = self._pointed_type(address=addr, process=self.memory_object.memobj_process)
+            instance = self._pointed_type(address=addr, process=self.process)
 
             for attribute_name in self._pointed_type.__memory_properties__.keys():
                 setattr(self._pointed_type, attribute_name, getattr(value, attribute_name))
@@ -132,7 +132,7 @@ class Pointer(MemoryProperty):
 
             self._pointed_type = typed_object_type
 
-            instance = self._pointed_type(address=addr, process=self.memory_object.memobj_process)
+            instance = self._pointed_type(address=addr, process=self.process)
 
             for attribute_name in self._pointed_type.__memory_properties__.keys():
                 setattr(instance, attribute_name, getattr(value, attribute_name))
@@ -140,7 +140,7 @@ class Pointer(MemoryProperty):
         elif isinstance(self._pointed_type, MemoryProperty):
             self._pointed_type.memory_object = MemoryObject(
                 address=addr,
-                process=self.memory_object.memobj_process,
+                process=self.process,
             )
             self._pointed_type.offset = 0
 
