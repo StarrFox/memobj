@@ -81,6 +81,13 @@ class Pointer(MemoryProperty):
 
             return self._pointed_type
 
+        elif isinstance(self._pointed_type, Pointer):
+            self._pointed_type.memory_object = MemoryObject(
+                address=addr,
+                process=self.process,
+            )
+            return self._pointed_type
+
         elif isinstance(self._pointed_type, MemoryProperty):
             # create a mock object at the address
             self._pointed_type.memory_object = MemoryObject(
