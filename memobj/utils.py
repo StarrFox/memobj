@@ -1,4 +1,11 @@
 import struct
+from enum import Enum
+
+
+class ProcessEndianess(Enum):
+    native = 0
+    little = 1
+    big = 2
 
 
 def align_up(value: int, align: int) -> int:

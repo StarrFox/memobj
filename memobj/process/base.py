@@ -1,13 +1,24 @@
 import ctypes
 import functools
-from pathlib import Path
 import platform
 import struct
-from typing import Any, Self
+import typing
+from pathlib import Path
+from typing import Any, Self, Literal, TypeAlias
 
 import regex
 
+from memobj.utils import ProcessEndianess
 
+
+# TODO: switch to type statements when we drop 3.11 (TypeAlias is depreciated)
+FormatStringInt: TypeAlias = Literal["b", "B", "h", "H", "i", "I", "l", "L", "q", "Q", "n", "N", "P"]
+FormatStringFloat: TypeAlias = Literal["e", "f", "d"]
+FormatStringBool: TypeAlias = Literal["?"]
+FormatStringBytes: TypeAlias = Literal["c", "s", "p"]
+
+
+# TODO: add non-keyword to args where needed (/)
 class Process:
     """A connected process"""
 
@@ -151,10 +162,10 @@ class Process:
         results = self.scan_memory(pattern, module=module)
         
         if result_len := len(results) == 0:
-            raise ValueError(F"No matches found for pattern {pattern}")
+            raise ValueError(F"No matches found for pattern {pattern!r}")
         
         elif result_len > 1:
-            raise ValueError(f"Multiple matches found for pattern {pattern}")
+            raise ValueError(f"Multiple matches found for pattern {pattern!r}")
         
         return results[0]
 
@@ -179,6 +190,76 @@ class Process:
 
         return formatted
 
+    @typing.overload
+    def read_formatted_single(
+        self,
+        address: int,
+        format_string: FormatStringInt,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native
+    ) -> int: ...
+
+    @typing.overload
+    def read_formatted_single(
+        self,
+        address: int,
+        format_string: FormatStringBool,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native
+    ) -> bool: ...
+
+    @typing.overload
+    def read_formatted_single(
+        self,
+        address: int,
+        format_string: FormatStringBytes,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native
+    ) -> bytes: ...
+
+    @typing.overload
+    def read_formatted_single(
+        self,
+        address: int,
+        format_string: FormatStringFloat,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native
+    ) -> float: ...
+
+    # NOTE: the order of these matters (the any default needs to be last)
+    @typing.overload
+    def read_formatted_single(
+        self,
+        address: int,
+        format_string: str,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native
+    ) -> Any: ...
+
+    def read_formatted_single(
+        self,
+        address: int,
+        format_string: str,
+        *,
+        # TODO: should the default be native?
+        endianess: ProcessEndianess = ProcessEndianess.native
+    ) -> Any:
+        if len(format_string) != 1:
+            raise ValueError(f"format_string should be a single character not {format_string}")
+
+        # we don't just include endianess in the format string to make typing easier
+        match endianess:
+            case ProcessEndianess.native:
+                endianess_string = "="
+            case ProcessEndianess.little:
+                endianess_string = "<"
+            case ProcessEndianess.big:
+                endianess_string = ">"
+
+        combined_format = endianess_string + format_string
+        
+        return self.read_formatted(address, combined_format)
+
     def write_formatted(self, address: int, format_string: str, value: tuple[Any] | Any):
         """
         Write formatted bytes to memory, format_string is passed directly to struct.pack
@@ -190,5 +271,81 @@ class Process:
         """
         packed_data = struct.pack(format_string, value)
         self.write_memory(address, packed_data)
+
+    @typing.overload
+    def write_formatted_single(
+        self,
+        address: int,
+        format_string: FormatStringInt,
+        value: int,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native,
+    ) -> None: ...
+
+    @typing.overload
+    def write_formatted_single(
+        self,
+        address: int,
+        format_string: FormatStringBool,
+        value: bool,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native,
+    ) -> None: ...
+
+    @typing.overload
+    def write_formatted_single(
+        self,
+        address: int,
+        format_string: FormatStringFloat,
+        value: float,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native,
+    ) -> None: ...
+    
+    @typing.overload
+    def write_formatted_single(
+        self,
+        address: int,
+        format_string: FormatStringBytes,
+        value: bytes,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native,
+    ) -> None: ...
+
+    # TODO: this overrides the other impls into making value Any when we'd like it to error
+    #  i.e. write_formatted_single(1, "?", 100) would be valid when it shouldn't be
+    # @typing.overload
+    # def write_formatted_single(
+    #     self,
+    #     address: int,
+    #     format_string: str,
+    #     value: Any,
+    #     *,
+    #     endianess: ProcessEndianess = ProcessEndianess.native,
+    # ) -> None: ...
+
+    def write_formatted_single(
+        self,
+        address: int,
+        format_string: str,
+        value: Any,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native,
+    ) -> None:
+        if len(format_string) != 1:
+            raise ValueError(f"format_string should be a single character not {format_string}")
+
+        # we don't just include endianess in the format string to make typing easier
+        match endianess:
+            case ProcessEndianess.native:
+                endianess_string = "="
+            case ProcessEndianess.little:
+                endianess_string = "<"
+            case ProcessEndianess.big:
+                endianess_string = ">"
+
+        combined_format = endianess_string + format_string
+        
+        return self.write_formatted(address, combined_format, value)
 
     # TODO: scan_formatted? scan_formatted(format_string, value)
