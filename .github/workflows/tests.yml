@@ -1,6 +1,7 @@
 name: Tests
 
 on:
+  workflow_dispatch:
   push:
     branches: ["main"]
     paths:
@@ -34,8 +35,6 @@ jobs:
       run: python -m pip install -U pip
     - name: Set up Poetry
       uses: abatilo/actions-poetry@v3
-      with:
-          poetry-version: "1.5.1"
     - name: Install dependencies
       run: poetry install
     - name: Run tests
