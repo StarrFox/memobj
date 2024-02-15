@@ -8,7 +8,7 @@ from typing import Any, Self, Literal, TypeAlias
 
 import regex
 
-from memobj.utils import ProcessEndianess
+from memobj.utils import ProcessEndianess, TypeFormat
 
 
 # TODO: switch to type statements when we drop 3.11 (TypeAlias is depreciated)
@@ -314,15 +314,15 @@ class Process:
 
     # TODO: this overrides the other impls into making value Any when we'd like it to error
     #  i.e. write_formatted_single(1, "?", 100) would be valid when it shouldn't be
-    # @typing.overload
-    # def write_formatted_single(
-    #     self,
-    #     address: int,
-    #     format_string: str,
-    #     value: Any,
-    #     *,
-    #     endianess: ProcessEndianess = ProcessEndianess.native,
-    # ) -> None: ...
+    @typing.overload
+    def write_formatted_single(
+        self,
+        address: int,
+        format_string: str,
+        value: Any,
+        *,
+        endianess: ProcessEndianess = ProcessEndianess.native,
+    ) -> None: ...
 
     def write_formatted_single(
         self,
@@ -345,7 +345,7 @@ class Process:
                 endianess_string = ">"
 
         combined_format = endianess_string + format_string
-        
+
         return self.write_formatted(address, combined_format, value)
 
     # TODO: scan_formatted? scan_formatted(format_string, value)

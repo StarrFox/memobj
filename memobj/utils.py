@@ -8,6 +8,27 @@ class ProcessEndianess(Enum):
     big = 2
 
 
+class TypeFormat(Enum):
+    """
+    Byte sized based types
+    """
+    # struct calls this char but they're trolling
+    byte = "c"
+    s1 = "b"
+    u1 = "B"
+    bool = "?"
+    s2 = "h"
+    u2 = "H"
+    s4 = "i"
+    u4 = "I"
+    s8 = "l"
+    u8 = "L"
+    ssize = "n"
+    usize = "N"
+    float = "f"
+    double = "d"
+
+
 def align_up(value: int, align: int) -> int:
     return align_down(value + (align - 1), align)
 
