@@ -92,7 +92,7 @@ class Hook:
     def allocate_variable(self, name: str, size: int) -> Allocation:
         if self._variables.get("name") is not None:
             raise ValueError(f"Variable {name} is already allocated")
-        
+
         allocation = self.allocator.allocate(size)
         self._variables[name] = allocation
         return allocation
@@ -114,12 +114,12 @@ class Hook:
         self.hook()
         self.post_hook()
         self._active = True
-        
+
         return self._variables
 
     def deactivate(self, *, close_allocator: bool = True):
         self.unhook()
-        
+
         if close_allocator:
             self.allocator.close()
 
@@ -144,7 +144,7 @@ class JmpHook(Hook):
 
         if self.MODULE is None:
             logger.warning(f"MODULE not set for {self.__class__.__name__} scanning entire memory space")
-        
+
         return super().activate()
 
     def hook(self):
@@ -196,7 +196,7 @@ class JmpHook(Hook):
             # mov rax,0x1122334455667788
             # jmp rax
             return 12
-        
+
         else:
             # push rax
             # mov rax,0x1122334455667788
@@ -220,7 +220,7 @@ class JmpHook(Hook):
                 raise RuntimeError(f"Got unknown instruction in bytes {position=} {search_bytes=}")
 
             control_flow = instruction.flow_control
-            
+
             match control_flow:
                 case FlowControl.NEXT:
                     pass
@@ -229,7 +229,7 @@ class JmpHook(Hook):
                         raise ValueError("Original code contains a return and we've pushed rax onto stack")
                 case FlowControl.UNCONDITIONAL_BRANCH | FlowControl.INDIRECT_BRANCH | FlowControl.CONDITIONAL_BRANCH:
                     near_target = instruction.near_branch_target
-                    
+
                     if near_target == 0:
                         raise ValueError(f"Original code contains a far branch: {instruction}")
 
@@ -240,7 +240,7 @@ class JmpHook(Hook):
                 # TODO: figure out how xbegin works
                 case FlowControl.XBEGIN_XABORT_XEND:
                     pass
-                
+
                 case FlowControl.EXCEPTION:
                     raise ValueError(f"Could not decode flow control of instruction: {instruction}")
 
@@ -278,18 +278,21 @@ def create_capture_hook(
     pattern: regex.Pattern | bytes,
     module: str,
     *,
-    registers: set[RegisterType]
+    registers: set[tuple[RegisterType, int]]
 ) -> type[JmpHook]:
-    
-    for register in registers:
-        if register == Register.RAX:
+
+    rax_offset = 0
+
+    for register_set in registers:
+        if register_set[0] == Register.RAX:
             rax_register = True
+            rax_offset = register_set[1]
             break
     else:
         rax_register = False
 
     if rax_register:
-        registers.remove(Register.RAX)
+        registers.remove((Register.RAX, rax_offset))
 
     class CaptureHook(JmpHook):
         PATTERN = pattern
@@ -301,32 +304,77 @@ def create_capture_hook(
             # we need to get rax first since it's used to mov the rest
             if rax_register:
                 rax_capture = self.allocate_variable("RAX_capture", 8)
-                instructions.append(
-                    Instruction.create_mem_reg(
+                if rax_offset == 0:
+                    instructions.append(Instruction.create_mem_reg(
                         Code.MOV_MOFFS64_RAX,
                         MemoryOperand(displ=rax_capture.address, displ_size=8),
                         Register.RAX,
-                    )
-                )
-            
-            for register in registers:
+                    ))
+                else:
+                    instructions += [
+                        Instruction.create_reg_mem(
+                            Code.MOV_R64_RM64,
+                            Register.RAX,
+                            MemoryOperand(Register.RAX, displ=rax_offset, displ_size=8),
+                        ),
+                        Instruction.create_mem_reg(
+                            Code.MOV_MOFFS64_RAX,
+                            MemoryOperand(displ=rax_capture.address, displ_size=8),
+                            Register.RAX,
+                        ),
+                    ]
+
+            for register, offset in registers:
                 name = get_register_name(register)
                 capture = self.allocate_variable(f"{name}_capture", 8)
-                instructions += [
-                    Instruction.create_reg_reg(
-                        Code.MOV_R64_RM64,
-                        Register.RAX,
-                        register,
-                    ),
+
+                if offset != 0:
+                    instructions.append(
+                        Instruction.create_reg_mem(
+                            Code.MOV_R64_RM64,
+                            Register.RAX,
+                            MemoryOperand(base=register, displ=offset, displ_size=8),
+                        )
+                    )
+                else:
+                    instructions.append(
+                        Instruction.create_reg_reg(
+                            Code.MOV_R64_RM64,
+                            Register.RAX,
+                            register,
+                        )
+                    )
+
+                instructions.append(
                     Instruction.create_mem_reg(
                         Code.MOV_MOFFS64_RAX,
                         MemoryOperand(displ=capture.address, displ_size=8),
                         Register.RAX,
-                    ),
-                ]
+                    )
+                )
 
             instructions.append(Instruction.create_reg(Code.POP_R64, Register.RAX))
 
             return instructions + tail
 
     return CaptureHook
+
+
+if __name__ == "__main__":
+    test = [Instruction.create_reg_mem(
+                            Code.MOV_R64_RM64,
+                            Register.RAX,
+                            MemoryOperand(Register.RAX, displ=0, displ_size=8),
+                        ),
+                        Instruction.create_reg_reg(
+                        Code.MOV_R64_RM64,
+                        Register.RAX,
+                        Register.RAX,
+                    )]
+
+    test_code = instructions_to_code(test, 0)
+
+
+    _debug_print_disassembly(test_code, 0)
+
+
