@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Any
+from typing import TYPE_CHECKING, Callable, Any, Self
 from logging import getLogger
 from functools import cached_property
 
@@ -66,6 +66,13 @@ class Hook:
 
         self._variables: dict[str, Allocation] = {}
         self._active: bool = False
+
+    def __enter__(self) -> Self:
+        self.activate()
+        return self
+    
+    def __exit__(self, *_):
+        self.deactivate()
 
     def pre_hook(self):
         pass
@@ -248,12 +255,13 @@ class JmpHook(Hook):
             position += len(instruction)
 
             if position >= self._jump_needed:
+                # TODO: the - 1 was incorrect, find out why
                 # - 1 on position is so the pop rax is run, - (position - needed) is for the no ops
                 jump_back_instructions = [
                     Instruction.create_reg_i64(
                         Code.MOV_R64_IMM64,
                         Register.RAX,
-                        jump_address + position - 1 - (position - self._jump_needed)
+                        jump_address + position - (position - self._jump_needed)
                     ),
                     Instruction.create_reg(Code.JMP_RM64, Register.RAX),
                 ]
