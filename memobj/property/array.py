@@ -1,5 +1,4 @@
 from typing import Any
-from copy import copy
 
 from . import MemoryProperty
 from .. import MemoryObject

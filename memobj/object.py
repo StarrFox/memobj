@@ -1,4 +1,3 @@
-import typing
 from typing import TYPE_CHECKING, Union, Callable
 
 from memobj.property import MemoryProperty, Pointer

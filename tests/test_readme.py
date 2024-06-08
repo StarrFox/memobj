@@ -4,7 +4,7 @@ from memobj.property import Signed4
 
 def test_readme(process):
     class PythonIntObject(MemoryObject):
-        value: int = Signed4(24)
+        value = Signed4(24)
 
     # id(x) gives the address of the object in cpython
     my_int = PythonIntObject(address=id(1), process=process)
