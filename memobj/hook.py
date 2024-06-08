@@ -278,8 +278,25 @@ def create_capture_hook(
     pattern: regex.Pattern | bytes,
     module: str,
     *,
-    registers: set[tuple[RegisterType, int]]
+    registers: set[tuple[RegisterType, int | None]]
 ) -> type[JmpHook]:
+    """Create a capture hook class
+    
+    registers is a set of tuples with the register to capture and
+    the offset to or None for the register value itself
+    
+    123 -> [rcx+123]
+    0 -> [rcx]
+    None -> rcx
+
+    Args:
+        pattern (regex.Pattern | bytes): Pattern to hook at
+        module (str): Module to search in
+        registers (set[tuple[RegisterType, int | None]]): Registers to capture
+
+    Returns:
+        type[JmpHook]: The created capture hook
+    """
 
     rax_offset = 0
 
@@ -303,45 +320,69 @@ def create_capture_hook(
 
             # we need to get rax first since it's used to mov the rest
             if rax_register:
-                rax_capture = self.allocate_variable("RAX_capture", 8)
+                rax_capture = self.allocate_variable("RAX_capture", 8)    
                 if rax_offset == 0:
+                    # mov rax,[rax]
+                    instructions.append(
+                        Instruction.create_reg_mem(
+                        Code.MOV_R64_RM64,
+                        Register.RAX,
+                        MemoryOperand(Register.RAX, displ_size=8)
+                        )
+                    )
+                elif rax_offset is None:
+                    # mov rax,rax
                     instructions.append(Instruction.create_mem_reg(
                         Code.MOV_MOFFS64_RAX,
                         MemoryOperand(displ=rax_capture.address, displ_size=8),
                         Register.RAX,
                     ))
                 else:
-                    instructions += [
+                    # mov rax,[rax+<offset>]
+                    instructions.append(
                         Instruction.create_reg_mem(
                             Code.MOV_R64_RM64,
                             Register.RAX,
                             MemoryOperand(Register.RAX, displ=rax_offset, displ_size=8),
-                        ),
-                        Instruction.create_mem_reg(
+                        ))
+                
+                # mov [<addr>],rax
+                instructions.append(Instruction.create_mem_reg(
                             Code.MOV_MOFFS64_RAX,
                             MemoryOperand(displ=rax_capture.address, displ_size=8),
                             Register.RAX,
-                        ),
-                    ]
+                        ))
 
             for register, offset in registers:
                 name = get_register_name(register)
                 capture = self.allocate_variable(f"{name}_capture", 8)
 
-                if offset != 0:
+                if offset == 0:
+                    # mov rax,[<reg>]
                     instructions.append(
                         Instruction.create_reg_mem(
-                            Code.MOV_R64_RM64,
-                            Register.RAX,
-                            MemoryOperand(base=register, displ=offset, displ_size=8),
+                        Code.MOV_R64_RM64,
+                        Register.RAX,
+                        MemoryOperand(register, displ_size=8)
                         )
                     )
-                else:
+
+                elif offset is None:
+                    # mov rax,<reg>
                     instructions.append(
                         Instruction.create_reg_reg(
                             Code.MOV_R64_RM64,
                             Register.RAX,
                             register,
+                        )
+                    )
+                else:
+                    # mov rax,[<reg>+<offset>]
+                    instructions.append(
+                        Instruction.create_reg_mem(
+                            Code.MOV_R64_RM64,
+                            Register.RAX,
+                            MemoryOperand(base=register, displ=offset, displ_size=8),
                         )
                     )
 
@@ -358,23 +399,4 @@ def create_capture_hook(
             return instructions + tail
 
     return CaptureHook
-
-
-if __name__ == "__main__":
-    test = [Instruction.create_reg_mem(
-                            Code.MOV_R64_RM64,
-                            Register.RAX,
-                            MemoryOperand(Register.RAX, displ=0, displ_size=8),
-                        ),
-                        Instruction.create_reg_reg(
-                        Code.MOV_R64_RM64,
-                        Register.RAX,
-                        Register.RAX,
-                    )]
-
-    test_code = instructions_to_code(test, 0)
-
-
-    _debug_print_disassembly(test_code, 0)
-
 
