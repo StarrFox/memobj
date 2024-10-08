@@ -11,7 +11,7 @@ class Void(MemoryProperty):
     def from_memory(self) -> Any:
         raise TypeError("cannot read void from memory")
 
-    def to_memory(self, _: Any):
+    def to_memory(self, value: Any):
         raise TypeError("cannot write void to memory")
 
     def memory_size(self) -> int:
@@ -40,7 +40,7 @@ class Pointer(MemoryProperty):
     def is_null(addr: int) -> bool:
         return addr == 0
 
-    def handle_null(self):
+    def handle_null(self) -> Any:
         raise ValueError("null pointer cannot be dereferenced")
 
     def cast(self, new_type: Union[MemoryProperty, "MemoryObject"]) -> "Pointer":
