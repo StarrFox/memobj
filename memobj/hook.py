@@ -250,6 +250,8 @@ class JmpHook(Hook):
             # mov rax,[0x1122334455667788]
             return 32
 
+    # TODO: there is currently a bug if we captured the x register being used (i.e. mov rax,123/add rax,rdx)
+    #  this is kind of a pain to properly handle; think of a solution
     def _get_hook_tail(self, jump_address: int) -> tuple[list[Instruction], int]:
         position = 0
         original_instructions = []
