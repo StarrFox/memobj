@@ -1,9 +1,10 @@
-from typing import TYPE_CHECKING, Callable, Any, Self
+import time
+from typing import TYPE_CHECKING, Callable, Any, Self, override
 from logging import getLogger
 from functools import cached_property
 
 import regex
-from iced_x86 import Instruction, Decoder, Code, MemoryOperand, Register, BlockEncoder, FlowControl
+from iced_x86 import Instruction, Decoder, Code, MemoryOperand, Register, BlockEncoder, FlowControl, OpKind
 from iced_x86._iced_x86_py import Register as RegisterType
 
 from memobj.allocation import Allocator, Allocation
@@ -80,7 +81,7 @@ class Hook:
     def post_hook(self):
         pass
 
-    def hook(self):
+    def hook(self) -> Any:
         raise NotImplemented()
 
     def unhook(self):
@@ -138,7 +139,7 @@ class Hook:
 class JmpHook(Hook):
     PATTERN: regex.Pattern | bytes | None = None
     MODULE: str | None = None
-    FUNCTION_TOP: bool = True
+    PRESERVE_RAX: bool = False
 
     def __init__(self, process: "Process"):
         super().__init__(process)
@@ -154,9 +155,33 @@ class JmpHook(Hook):
 
         return super().activate()
 
+    # TODO: move the delayed dealloc stuff to Hook class?
+    def deactivate(self, *, close_allocator: bool = True, delayed_close_allocator_seconds: float | None = None):
+        """Deactivates the hook
+
+        Args:
+            close_allocator (bool, optional): If the body allocator should be closed. Defaults to True.
+            delayed_close_allocator_seconds (float | None, optional): how many second to delay body deallocation. Defaults to None.
+        """
+        if close_allocator is False and delayed_close_allocator_seconds is not None:
+            raise ValueError("close_allocator cannot be False with a delayed number of seconds")
+        
+        if close_allocator is True and delayed_close_allocator_seconds is not None:
+            # this will write over the outside jmp so the body is no longer entered
+            super().deactivate(close_allocator=False)
+            # this wait gives the process time to exit the hook body code, should only need ~1 second
+            time.sleep(delayed_close_allocator_seconds)
+            # finally deallocate the body
+            self.allocator.close()
+        else:
+            return super().deactivate(close_allocator=close_allocator)
+
     def hook(self):
         assert self.PATTERN is not None
         target_address = self.process.scan_one(self.PATTERN, module=self.MODULE)
+
+        # we need this for delayed deactivation
+        self._target_address = target_address
 
         tail, noops = self._get_hook_tail(target_address)
         hook_instructions = self.get_code(tail)
@@ -165,16 +190,26 @@ class JmpHook(Hook):
         hook_code = instructions_to_code(hook_instructions, hook_allocation.address)
         self.process.write_memory(hook_allocation.address, hook_code)
 
-        if not self.FUNCTION_TOP:
+        if self.PRESERVE_RAX:
+            rax_preserve_allocation = self.allocate_variable("rax_preserve", 8)
+
             jump_instructions = [
-                Instruction.create_reg(Code.PUSH_R64, Register.RAX),
+                Instruction.create_mem_reg(
+                    Code.MOV_MOFFS64_RAX,
+                    MemoryOperand(displ=rax_preserve_allocation.address, displ_size=8),
+                    Register.RAX
+                ),
                 Instruction.create_reg_u64(
                     Code.MOV_R64_IMM64,
                     Register.RAX,
                     hook_allocation.address,
                 ),
                 Instruction.create_reg(Code.JMP_RM64, Register.RAX),
-                Instruction.create_reg(Code.POP_R64, Register.RAX),
+                Instruction.create_reg_mem(
+                    Code.MOV_RAX_MOFFS64,
+                    Register.RAX,
+                    MemoryOperand(displ=rax_preserve_allocation.address, displ_size=8)
+                ),
             ]
         else:
             jump_instructions = [
@@ -189,7 +224,11 @@ class JmpHook(Hook):
         for _ in range(noops):
             jump_instructions.append(Instruction.create(Code.NOPD))
 
+        # we also need this for delayed deactivation
+        self._jump_code = jump_instructions
+
         jump_code = instructions_to_code(jump_instructions, target_address)
+        self._jump_size = len(jump_code)
         self.process.write_memory(target_address, jump_code)
 
     def unhook(self):
@@ -199,25 +238,27 @@ class JmpHook(Hook):
 
     @cached_property
     def _jump_needed(self) -> int:
-        if self.FUNCTION_TOP:
+        if not self.PRESERVE_RAX:
             # mov rax,0x1122334455667788
             # jmp rax
             return 12
-
         else:
-            # push rax
+            # NOTE: these movs are 10 each which is quite bad
+            # mov [0x1122334455667788],rax
             # mov rax,0x1122334455667788
             # jmp rax
-            # pop rax
-            return 14
+            # mov rax,[0x1122334455667788]
+            return 32
 
+    # TODO: there is currently a bug if we captured the x register being used (i.e. mov rax,123/add rax,rdx)
+    #  this is kind of a pain to properly handle; think of a solution
     def _get_hook_tail(self, jump_address: int) -> tuple[list[Instruction], int]:
         position = 0
         original_instructions = []
 
         search_bytes = self.process.read_memory(jump_address, self._jump_needed + 10)
 
-        logger.debug(f"{search_bytes=}")
+        #logger.debug(f"{search_bytes=}")
 
         decoder = Decoder(64, search_bytes, ip=jump_address)
 
@@ -231,9 +272,6 @@ class JmpHook(Hook):
             match control_flow:
                 case FlowControl.NEXT:
                     pass
-                case FlowControl.RETURN:
-                    if not self.FUNCTION_TOP:
-                        raise ValueError("Original code contains a return and we've pushed rax onto stack")
                 case FlowControl.UNCONDITIONAL_BRANCH | FlowControl.INDIRECT_BRANCH | FlowControl.CONDITIONAL_BRANCH:
                     near_target = instruction.near_branch_target
 
@@ -255,13 +293,14 @@ class JmpHook(Hook):
             position += len(instruction)
 
             if position >= self._jump_needed:
-                # TODO: the - 1 was incorrect, find out why
-                # - 1 on position is so the pop rax is run, - (position - needed) is for the no ops
+                print(f"{position=} {self._jump_needed=} {jump_address=}")
+                # TODO: why exactly did I want to run the no ops?
+                # - 10 on position is so the `mov rax,[0xFFFFFFFFF]` is run, - (position - needed) is for the no ops
                 jump_back_instructions = [
                     Instruction.create_reg_i64(
                         Code.MOV_R64_IMM64,
                         Register.RAX,
-                        jump_address + position - (position - self._jump_needed)
+                        jump_address + position - (position - self._jump_needed) - (10 if self.PRESERVE_RAX else 0)
                     ),
                     Instruction.create_reg(Code.JMP_RM64, Register.RAX),
                 ]
@@ -385,6 +424,10 @@ def create_capture_hook(
                         )
                     )
                 else:
+                    # TODO: make sure to account for 32 bit here if support is added
+                    if register == Register.RSP:
+                        offset += 8 # push rax before moves
+
                     # mov rax,[<reg>+<offset>]
                     instructions.append(
                         Instruction.create_reg_mem(
@@ -407,4 +450,3 @@ def create_capture_hook(
             return instructions + tail
 
     return CaptureHook
-
