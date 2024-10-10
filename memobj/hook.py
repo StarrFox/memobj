@@ -1,10 +1,10 @@
 import time
-from typing import TYPE_CHECKING, Callable, Any, Self, override
+from typing import TYPE_CHECKING, Callable, Any, Self
 from logging import getLogger
 from functools import cached_property
 
 import regex
-from iced_x86 import Instruction, Decoder, Code, MemoryOperand, Register, BlockEncoder, FlowControl, OpKind
+from iced_x86 import Instruction, Decoder, Code, MemoryOperand, Register, BlockEncoder, FlowControl
 from iced_x86._iced_x86_py import Register as RegisterType
 
 from memobj.allocation import Allocator, Allocation
@@ -93,7 +93,6 @@ class Hook:
 
     def get_code(
         self,
-        tail: list[Instruction]
     ) -> list[Instruction]:
         raise NotImplemented()
 
@@ -139,7 +138,7 @@ class Hook:
 class JmpHook(Hook):
     PATTERN: regex.Pattern | bytes | None = None
     MODULE: str | None = None
-    PRESERVE_RAX: bool = False
+    PRESERVE_RAX: bool = True
 
     def __init__(self, process: "Process"):
         super().__init__(process)
@@ -180,55 +179,18 @@ class JmpHook(Hook):
         assert self.PATTERN is not None
         target_address = self.process.scan_one(self.PATTERN, module=self.MODULE)
 
-        # we need this for delayed deactivation
-        self._target_address = target_address
+        head = self.get_hook_head()
+        tail, noops = self.get_hook_tail(target_address)
+        hook_instructions = self.get_code()
+        hook_instructions = head + hook_instructions + tail
 
-        tail, noops = self._get_hook_tail(target_address)
-        hook_instructions = self.get_code(tail)
         allocation_size = sum(map(len, hook_instructions))
         hook_allocation = self.allocate_variable("hook_site", allocation_size)
         hook_code = instructions_to_code(hook_instructions, hook_allocation.address)
         self.process.write_memory(hook_allocation.address, hook_code)
 
-        if self.PRESERVE_RAX:
-            rax_preserve_allocation = self.allocate_variable("rax_preserve", 8)
-
-            jump_instructions = [
-                Instruction.create_mem_reg(
-                    Code.MOV_MOFFS64_RAX,
-                    MemoryOperand(displ=rax_preserve_allocation.address, displ_size=8),
-                    Register.RAX
-                ),
-                Instruction.create_reg_u64(
-                    Code.MOV_R64_IMM64,
-                    Register.RAX,
-                    hook_allocation.address,
-                ),
-                Instruction.create_reg(Code.JMP_RM64, Register.RAX),
-                Instruction.create_reg_mem(
-                    Code.MOV_RAX_MOFFS64,
-                    Register.RAX,
-                    MemoryOperand(displ=rax_preserve_allocation.address, displ_size=8)
-                ),
-            ]
-        else:
-            jump_instructions = [
-                Instruction.create_reg_u64(
-                    Code.MOV_R64_IMM64,
-                    Register.RAX,
-                    hook_allocation.address,
-                ),
-                Instruction.create_reg(Code.JMP_RM64, Register.RAX),
-            ]
-
-        for _ in range(noops):
-            jump_instructions.append(Instruction.create(Code.NOPD))
-
-        # we also need this for delayed deactivation
-        self._jump_code = jump_instructions
-
+        jump_instructions = self.get_jump_code(hook_allocation.address, noops)
         jump_code = instructions_to_code(jump_instructions, target_address)
-        self._jump_size = len(jump_code)
         self.process.write_memory(target_address, jump_code)
 
     def unhook(self):
@@ -244,15 +206,28 @@ class JmpHook(Hook):
             return 12
         else:
             # NOTE: these movs are 10 each which is quite bad
-            # mov [0x1122334455667788],rax
+            # push rax
             # mov rax,0x1122334455667788
             # jmp rax
-            # mov rax,[0x1122334455667788]
-            return 32
+            # pop rax
+            return 14
+
+    def get_hook_head(self) -> list[Instruction]:
+        if self.PRESERVE_RAX:
+            head = [
+                Instruction.create_reg(
+                    Code.POP_R64,
+                    Register.RAX,
+                )
+            ]
+        else:
+            head = []
+
+        return head
 
     # TODO: there is currently a bug if we captured the x register being used (i.e. mov rax,123/add rax,rdx)
     #  this is kind of a pain to properly handle; think of a solution
-    def _get_hook_tail(self, jump_address: int) -> tuple[list[Instruction], int]:
+    def get_hook_tail(self, jump_address: int) -> tuple[list[Instruction], int]:
         position = 0
         original_instructions = []
 
@@ -293,17 +268,23 @@ class JmpHook(Hook):
             position += len(instruction)
 
             if position >= self._jump_needed:
-                print(f"{position=} {self._jump_needed=} {jump_address=}")
-                # TODO: why exactly did I want to run the no ops?
-                # - 10 on position is so the `mov rax,[0xFFFFFFFFF]` is run, - (position - needed) is for the no ops
+                # - 1 on position is so the `pop rax` is run, - (position - needed) is for the no ops
                 jump_back_instructions = [
                     Instruction.create_reg_i64(
                         Code.MOV_R64_IMM64,
                         Register.RAX,
-                        jump_address + position - (position - self._jump_needed) - (10 if self.PRESERVE_RAX else 0)
+                        jump_address + position - (position - self._jump_needed) - (1 if self.PRESERVE_RAX else 0)
                     ),
                     Instruction.create_reg(Code.JMP_RM64, Register.RAX),
                 ]
+
+                if self.PRESERVE_RAX:
+                    jump_back_instructions = [
+                        Instruction.create_reg(
+                            Code.PUSH_R64,
+                            Register.RAX,
+                        )
+                    ] + jump_back_instructions
 
                 noops = 0
                 if position > self._jump_needed:
@@ -316,7 +297,39 @@ class JmpHook(Hook):
 
         raise RuntimeError("Couldn't find enough bytes for jump")
 
-    def get_code(self, tail: list[Instruction]) -> list[Instruction]:
+    def get_jump_code(self, hook_address: int, noops_needed: int) -> list[Instruction]:
+        if self.PRESERVE_RAX:
+            rax_preserve_allocation = self.allocate_variable("rax_preserve", 8)
+
+            jump_instructions = [
+                Instruction.create_reg(
+                    Code.PUSH_R64,
+                    Register.RAX
+                ),
+                Instruction.create_reg_u64(
+                    Code.MOV_R64_IMM64,
+                    Register.RAX,
+                    hook_address,
+                ),
+                Instruction.create_reg(Code.JMP_RM64, Register.RAX),
+                Instruction.create_reg(Code.POP_R64, Register.RAX),
+            ]
+        else:
+            jump_instructions = [
+                Instruction.create_reg_u64(
+                    Code.MOV_R64_IMM64,
+                    Register.RAX,
+                    hook_address,
+                ),
+                Instruction.create_reg(Code.JMP_RM64, Register.RAX),
+            ]
+
+        for _ in range(noops_needed):
+            jump_instructions.append(Instruction.create(Code.NOPD))
+
+        return jump_instructions
+
+    def get_code(self) -> list[Instruction]:
         raise NotImplemented()
 
 
@@ -362,7 +375,7 @@ def create_capture_hook(
         PATTERN = pattern
         MODULE = module
 
-        def get_code(self, tail: list[Instruction]) -> list[Instruction]:
+        def get_code(self) -> list[Instruction]:
             instructions: list[Instruction] = [Instruction.create_reg(Code.PUSH_R64, Register.RAX)]
 
             # we need to get rax first since it's used to mov the rest
@@ -447,6 +460,6 @@ def create_capture_hook(
 
             instructions.append(Instruction.create_reg(Code.POP_R64, Register.RAX))
 
-            return instructions + tail
+            return instructions
 
     return CaptureHook
