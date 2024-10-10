@@ -297,8 +297,6 @@ class JmpHook(Hook):
 
     def get_jump_code(self, hook_address: int, noops_needed: int) -> list[Instruction]:
         if self.PRESERVE_RAX:
-            rax_preserve_allocation = self.allocate_variable("rax_preserve", 8)
-
             jump_instructions = [
                 Instruction.create_reg(
                     Code.PUSH_R64,
