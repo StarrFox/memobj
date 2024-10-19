@@ -20,7 +20,7 @@ jobs:
     - name: Install dependencies
       run: poetry install
     - name: Build docs
-      run: poetry run sphinx-build .\docs\source\ .\docs\build\ --builder html
+      run: poetry run sphinx-build docs/source/ docs/build/ --builder html
     - name: Upload docs artifact
       uses: actions/upload-artifact@v4
       with:
