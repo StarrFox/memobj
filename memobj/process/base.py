@@ -4,7 +4,7 @@ import platform
 import struct
 import typing
 from pathlib import Path
-from typing import Any, Self, Literal, TypeAlias
+from typing import Any, Self, Literal, TypeAlias, Iterator
 
 import regex
 
@@ -21,6 +21,13 @@ FormatStringBytes: TypeAlias = Literal["c", "s", "p"]
 # TODO: add non-keyword to args where needed (/)
 class Process:
     """A connected process"""
+
+    @functools.cached_property
+    def process_id(self) -> int:
+        """
+        The process id
+        """
+        raise NotImplementedError()
 
     @functools.cached_property
     def process_64_bit(self) -> bool:
@@ -90,6 +97,8 @@ class Process:
         The opened process
         """
         raise NotImplementedError()
+
+    def itererate_modules(self): ...
 
     def allocate_memory(self, size: int) -> int:
         """
