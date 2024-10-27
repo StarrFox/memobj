@@ -21,10 +21,12 @@ from memobj.process.windows.utils import (
 from memobj.process import Process
 
 
+# TODO: update everything that uses modules to use the new WindowsModule
 class WindowsProcess(Process):
     def __init__(self, process_handle: int):
         self.process_handle = process_handle
 
+    # TODO: why are we getting debug privileges for our own process?
     @staticmethod
     def _get_debug_privileges():
         with CheckWindowsOsError():
@@ -82,6 +84,15 @@ class WindowsProcess(Process):
 
             if adjust_token_success == 0:
                 raise RuntimeError("AdjustTokenPrivileges failed")
+
+    @functools.cached_property
+    def process_id(self) -> int:
+        # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocessid
+        maybe_process_id = ctypes.windll.kernel32.GetProcessId(self.process_handle)
+        if maybe_process_id == 0:
+            raise ValueError("GetProcessId failed")
+        
+        return maybe_process_id
 
     @functools.cached_property
     def process_64_bit(self) -> bool:
