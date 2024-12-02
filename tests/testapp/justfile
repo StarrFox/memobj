@@ -1,0 +1,13 @@
+set windows-shell := [x"powershell"]
+
+build:
+    g++ -Wall -Wextra testapp.cpp -o testapp.exe
+
+build-e:
+    g++ -Wall -Wextra -Werror testapp.cpp -o testapp.exe
+
+build-opt:
+    g++ -Wall -Wextra -O3 testapp.cpp -o testapp.exe
+
+clean:
+    rm testapp.exe
