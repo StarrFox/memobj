@@ -3,6 +3,7 @@ import ctypes.wintypes
 import enum
 
 
+
 class CheckWindowsOsError:
     def __enter__(self):
         # https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-setlasterror
@@ -47,7 +48,6 @@ class WindowsMemoryBasicInformation(ctypes.Structure):
         ]
 
 
-# TODO: wrap this into a common type for linux and windows
 # https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-moduleinfo
 class WindowsModuleInfo(ctypes.Structure):
     _fields_ = [
@@ -56,6 +56,24 @@ class WindowsModuleInfo(ctypes.Structure):
         ("EntryPoint", ctypes.wintypes.LPVOID),
     ]
 
+
+# https://github.com/Cr4sh/fwexpl/blob/16f340d666b25899eda61f7b3ebf3d518eec01b0/src/common/TlHelp32.h#L24C9-L24C30
+MAX_MODULE_NAME32: int = 255
+
+# https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-moduleentry32
+class ModuleEntry32(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", ctypes.wintypes.DWORD),
+        ("th32ModuleID", ctypes.wintypes.DWORD),
+        ("th32ProcessID", ctypes.wintypes.DWORD),
+        ("GlblcntUsage", ctypes.wintypes.DWORD),
+        ("ProccntUsage", ctypes.wintypes.DWORD),
+        ("modBaseAddr", ctypes.c_void_p),
+        ("modBaseSize", ctypes.wintypes.DWORD),
+        ("hModule", ctypes.wintypes.HMODULE),
+        ("szModule", ctypes.c_char * (MAX_MODULE_NAME32 + 1)),
+        ("szExePath", ctypes.c_char * ctypes.wintypes.MAX_PATH),
+    ]
 
 # https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants
 class WindowsMemoryProtection(enum.IntFlag):
