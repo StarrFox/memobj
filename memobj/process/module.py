@@ -17,4 +17,4 @@ class Module:
         Returns:
             dict[str, int]: A mapping of module symbol to address
         """
-        raise NotImplemented()
+        raise NotImplementedError()

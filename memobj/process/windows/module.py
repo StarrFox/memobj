@@ -66,9 +66,20 @@ class WindowsModule(Module):
             ctypes.windll.kernel32.CloseHandle(module_snapshot)
 
     @classmethod
-    def from_name(cls, process: WindowsProcess, name: str) -> Self:
+    def from_name(cls, process: WindowsProcess, name: str, *, ignore_case: bool = True) -> Self:
+        if ignore_case:
+            name = name.lower()
+
         for module in cls._iter_modules(process):
-            if (module_name := module.szModule.decode()) == name:
+            module_name = module.szModule.decode()
+
+            # use another variable to preserve case in WindowsModule object
+            if ignore_case:
+                compare_name = module_name.lower()
+            else:
+                compare_name = module_name
+
+            if compare_name == name:
                 return cls(
                     name=module_name,
                     base_address=module.modBaseAddr,
@@ -78,6 +89,12 @@ class WindowsModule(Module):
                 )
 
         raise ValueError(f"No modules named {name}")
+
+    def get_symbol_with_name(self, name: str) -> int:
+        try:
+            return self.get_symbols()[name]
+        except KeyError:
+            raise ValueError(f"No symbol named {name}")
 
     def get_symbols(self) -> dict[str, int]:
         if self._symbols is not None:

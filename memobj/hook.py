@@ -82,7 +82,7 @@ class Hook:
         pass
 
     def hook(self) -> Any:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def unhook(self):
         pass
@@ -94,7 +94,7 @@ class Hook:
     def get_code(
         self,
     ) -> list[Instruction]:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def allocate_variable(self, name: str, size: int) -> Allocation:
         if self._variables.get("name") is not None:
@@ -326,7 +326,7 @@ class JmpHook(Hook):
         return jump_instructions
 
     def get_code(self) -> list[Instruction]:
-        raise NotImplemented()
+        raise NotImplementedError()
 
 
 # NOTE: this registertype is kinda mid, we may need to provide our own
