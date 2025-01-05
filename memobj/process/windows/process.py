@@ -471,6 +471,7 @@ class WindowsProcess(Process):
 
         raise ValueError(f"No modules named {name}")
 
+    # note: platform dependent
     def create_remote_thread(self, address: int, *, param_pointer: ctypes.c_void_p | None = None, thread_wait_time: int = 0) -> int:
         """Create a remote thread in the process
 
@@ -511,6 +512,7 @@ class WindowsProcess(Process):
 
         return thread_handle
 
+    # note: platform dependent
     def inject_dll(self, path: Path | str) -> WindowsModule:
         """Inject a dll into process
 
