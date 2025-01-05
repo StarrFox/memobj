@@ -34,7 +34,7 @@ jobs:
     - name: Update pip
       run: python -m pip install -U pip
     - name: Set up Poetry
-      uses: abatilo/actions-poetry@v3
+      uses: abatilo/actions-poetry@v4
     - name: Install dependencies
       run: poetry install
     - name: Run tests
