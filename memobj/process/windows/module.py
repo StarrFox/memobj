@@ -17,11 +17,13 @@ Module(...)
 """
 import ctypes
 
-from typing import Self, Iterator
+from typing import Self, Iterator, TYPE_CHECKING
 from memobj.process import Module
 
 from .utils import ModuleEntry32, CheckWindowsOsError
-from .process import WindowsProcess
+
+if TYPE_CHECKING:
+    from .process import WindowsProcess
 
 
 INVALID_HANDLE_VALUE: int = -1
@@ -35,7 +37,7 @@ class WindowsModule(Module):
     # TODO: get wide character variants working
     # adapted to python from https://learn.microsoft.com/en-us/windows/win32/toolhelp/traversing-the-module-list
     @staticmethod
-    def _iter_modules(process: WindowsProcess) -> Iterator[ModuleEntry32]:
+    def _iter_modules(process: "WindowsProcess") -> Iterator[ModuleEntry32]:
         """
         Note that the yielded modules are only valid for one iteration, i.e. references to them should not
         be stored
@@ -66,7 +68,7 @@ class WindowsModule(Module):
             ctypes.windll.kernel32.CloseHandle(module_snapshot)
 
     @classmethod
-    def from_name(cls, process: WindowsProcess, name: str, *, ignore_case: bool = True) -> Self:
+    def from_name(cls, process: "WindowsProcess", name: str, *, ignore_case: bool = True) -> Self:
         if ignore_case:
             name = name.lower()
 
