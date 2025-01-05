@@ -487,28 +487,30 @@ class WindowsProcess(Process):
         Returns:
             int: A handle to the thread
         """
-        # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread
-        thread_handle = ctypes.windll.kernel32.CreateRemoteThread(
-            self.process_handle, # hProcess
-            0, # lpThreadAttributes
-            0, # dwStackSize
-            ctypes.c_void_p(address), # lpStartAddress
-            param_pointer if param_pointer is not None else 0, # lpParameter
-            0, # dwCreationFlags
-            0 # lpThreadId
-        )
+        with CheckWindowsOsError():
+            # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread
+            thread_handle = ctypes.windll.kernel32.CreateRemoteThread(
+                self.process_handle, # hProcess
+                0, # lpThreadAttributes
+                0, # dwStackSize
+                ctypes.c_void_p(address), # lpStartAddress
+                param_pointer if param_pointer is not None else 0, # lpParameter
+                0, # dwCreationFlags
+                0 # lpThreadId
+            )
 
-        if thread_handle == 0:
-            raise ValueError(f"CreateRemoteThread failed for address {hex(address)}")
+            if thread_handle == 0:
+                raise ValueError(f"CreateRemoteThread failed for address {hex(address)}")
 
-        # https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject
-        thread_status = ctypes.windll.kernel32.WaitForSingleObject(
-            thread_handle,
-            thread_wait_time
-        )
+        with CheckWindowsOsError():
+            # https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject
+            thread_status = ctypes.windll.kernel32.WaitForSingleObject(
+                thread_handle,
+                thread_wait_time
+            )
 
-        if thread_wait_time != 0 and thread_status != 0:
-            raise TimeoutError(f"Waiting for injected dll thread to finish failed: {thread_status}")
+            if thread_wait_time != 0 and thread_status != 0:
+                raise TimeoutError(f"Waiting for injected dll thread to finish failed: {thread_status}")
 
         return thread_handle
 
@@ -528,15 +530,13 @@ class WindowsProcess(Process):
 
         encoded_path = str(path.absolute()).encode("utf-16le")
 
-        path_allocator = self.create_allocator()
-        path_allocation = path_allocator.allocate(len(encoded_path))
+        with self.create_allocator() as allocator:
+            path_allocation = allocator.allocate(len(encoded_path))
+            self.write_memory(path_allocation.address, encoded_path)
+            
+            kernel32 = WindowsModule.from_name(self, "kernel32.dll")
+            LoadLibraryW = kernel32.get_symbol_with_name("LoadLibraryW")
+            # https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryw
+            self.create_remote_thread(LoadLibraryW, param_pointer=ctypes.c_void_p(path_allocation.address), thread_wait_time=-1)
 
-        self.write_memory(path_allocation.address, encoded_path)
-        
-        kernel32 = WindowsModule.from_name(self, "kernel32.dll")
-        LoadLibraryW = kernel32.get_symbol_with_name("LoadLibraryW")
-        # https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryw
-        self.create_remote_thread(LoadLibraryW, param_pointer=ctypes.c_void_p(path_allocation.address), thread_wait_time=-1)
-
-        path_allocator.close()
         return WindowsModule.from_name(self, path.name)
