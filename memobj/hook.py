@@ -1,5 +1,6 @@
 import time
-from typing import TYPE_CHECKING, Callable, Any, Self
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Callable, Any, Self, Sequence
 from logging import getLogger
 from functools import cached_property
 
@@ -329,12 +330,52 @@ class JmpHook(Hook):
         raise NotImplementedError()
 
 
+"""
+123: <block>
+u32 entries
+u32 entry_size
+entry
+entry
+entry
+
+
+push rax
+push r8
+push r9
+mov rax,[rcx]
+mov r8, [123]
+mov r9, [123+4]
+cmp r8,<max_entry_number>
+jz reset
+mov [123+r8*r9+8],rax
+inc r8
+mov [123],r8
+jmp pop_off
+reset:
+mov [123],0x00000000
+pop_off:
+pop rax
+pop r8
+pop r9
+"""
+# class ListMulticapture(JmpHook):
+#     ...
+
+
+@dataclass
+class RegisterCaptureSettings:
+    register: RegisterType
+    derefference: bool = True
+    offset: int = 0
+
+
+# TODO: remove the offset stuff from register capture, it's useless
 # NOTE: this registertype is kinda mid, we may need to provide our own
 def create_capture_hook(
     pattern: regex.Pattern | bytes,
     module: str,
     *,
-    registers: set[tuple[RegisterType, int | None]]
+    register_captures: list[RegisterCaptureSettings]
 ) -> type[JmpHook]:
     """Create a capture hook class
     
@@ -348,24 +389,20 @@ def create_capture_hook(
     Args:
         pattern (regex.Pattern | bytes): Pattern to hook at
         module (str): Module to search in
-        registers (set[tuple[RegisterType, int | None]]): Registers to capture
+        register_captures (list[RegisterCaptureSettings]): Registers to capture
 
     Returns:
         type[JmpHook]: The created capture hook
     """
-
-    rax_offset = 0
-
-    for register_set in registers:
-        if register_set[0] == Register.RAX:
-            rax_register = True
-            rax_offset = register_set[1]
+    for register_setting in register_captures:
+        if register_setting.register == Register.RAX:
+            rax_register = register_setting
             break
     else:
-        rax_register = False
+        rax_register = None
 
-    if rax_register:
-        registers.remove((Register.RAX, rax_offset))
+    if rax_register is not None:
+        register_captures.remove(rax_register)
 
     class CaptureHook(JmpHook):
         PATTERN = pattern
@@ -375,9 +412,9 @@ def create_capture_hook(
             instructions: list[Instruction] = [Instruction.create_reg(Code.PUSH_R64, Register.RAX)]
 
             # we need to get rax first since it's used to mov the rest
-            if rax_register:
+            if rax_register is not None:
                 rax_capture = self.allocate_variable("RAX_capture", 8)    
-                if rax_offset == 0:
+                if rax_register.derefference is True and rax_register.offset == 0:
                     # mov rax,[rax]
                     instructions.append(
                         Instruction.create_reg_mem(
@@ -386,7 +423,7 @@ def create_capture_hook(
                         MemoryOperand(Register.RAX, displ_size=8)
                         )
                     )
-                elif rax_offset is None:
+                elif rax_register.derefference is False:
                     # mov rax,rax
                     instructions.append(Instruction.create_mem_reg(
                         Code.MOV_MOFFS64_RAX,
@@ -399,9 +436,9 @@ def create_capture_hook(
                         Instruction.create_reg_mem(
                             Code.MOV_R64_RM64,
                             Register.RAX,
-                            MemoryOperand(Register.RAX, displ=rax_offset, displ_size=8),
+                            MemoryOperand(Register.RAX, displ=rax_register.offset, displ_size=8),
                         ))
-                
+
                 # mov [<addr>],rax
                 instructions.append(Instruction.create_mem_reg(
                             Code.MOV_MOFFS64_RAX,
@@ -409,32 +446,34 @@ def create_capture_hook(
                             Register.RAX,
                         ))
 
-            for register, offset in registers:
-                name = get_register_name(register)
+            for register_setting in register_captures:
+                name = get_register_name(register_setting.register)
                 capture = self.allocate_variable(f"{name}_capture", 8)
 
-                if offset == 0:
+                if register_setting.derefference is True and register_setting.offset == 0:
                     # mov rax,[<reg>]
                     instructions.append(
                         Instruction.create_reg_mem(
                         Code.MOV_R64_RM64,
                         Register.RAX,
-                        MemoryOperand(register, displ_size=8)
+                        MemoryOperand(register_setting.register, displ_size=8)
                         )
                     )
 
-                elif offset is None:
+                elif register_setting.derefference is False:
                     # mov rax,<reg>
                     instructions.append(
                         Instruction.create_reg_reg(
                             Code.MOV_R64_RM64,
                             Register.RAX,
-                            register,
+                            register_setting.register,
                         )
                     )
                 else:
+                    offset = register_setting.offset
+
                     # TODO: make sure to account for 32 bit here if support is added
-                    if register == Register.RSP:
+                    if register_setting.register == Register.RSP:
                         offset += 8 # push rax before moves
 
                     # mov rax,[<reg>+<offset>]
@@ -442,7 +481,7 @@ def create_capture_hook(
                         Instruction.create_reg_mem(
                             Code.MOV_R64_RM64,
                             Register.RAX,
-                            MemoryOperand(base=register, displ=offset, displ_size=8),
+                            MemoryOperand(base=register_setting.register, displ=offset, displ_size=8),
                         )
                     )
 
