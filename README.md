@@ -31,4 +31,4 @@ print(my_int.value)
 
 ## support
 
-discord: <https://discord.gg/7hBStdXkyR>
+discord: <https://discord.gg/wcftyYm6qe>
