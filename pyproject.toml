@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "memobj"
-version = "0.14.0"
+version = "0.14.1"
 description = "A library for defining objects in memory"
 authors = ["StarrFox <starrfox6312@gmail.com>"]
 license = "MIT"
@@ -9,8 +9,8 @@ repository = "https://github.com/StarrFox/memobj"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-regex = "^2024.0.0"
-iced-x86 = "^1.20.0"
+regex = "^2024.11.6"
+iced-x86 = "^1.21.0"
 pefile = {version = "2021.9.3", platform = "win32"}
 
 [tool.poetry.group.tests.dependencies]
