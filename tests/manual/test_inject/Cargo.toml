@@ -1,0 +1,14 @@
+[package]
+name = "test_inject"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+windows = { version = "0.61.1", features = ["Win32_System_Console", "Win32_Foundation"] }
+
+[[bin]]
+name = "inject_target"
+path = "src/bin/inject_target.rs"

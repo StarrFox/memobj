@@ -33,7 +33,7 @@ TH32CS_SNAPMODULE: int = 0x8
 class WindowsModule(Module):
     _symbols: dict[str, int] | None = None
 
-    # TODO: make a user facing iterface to this copying the object so it isnt changed while they're using it
+    # TODO: make a user facing iterface to this copying the object so it isn't changed while they're using it
     # TODO: get wide character variants working
     # adapted to python from https://learn.microsoft.com/en-us/windows/win32/toolhelp/traversing-the-module-list
     @staticmethod
