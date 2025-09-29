@@ -68,6 +68,7 @@ class MemoryObject(metaclass=MemoryObjectMeta):
         if self._address_provider is not None:
             return self._address_provider()
 
+        # TODO: deprecate this, the Pointer property can hold the offset i.e. player = Pointer(0x10, Player)
         # the property-like usage
         if self._base_address is None:
             raise ValueError("Uninitialized memoryobject did not receieve an address")

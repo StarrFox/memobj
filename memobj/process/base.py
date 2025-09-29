@@ -98,7 +98,8 @@ class Process:
         """
         raise NotImplementedError()
 
-    def itererate_modules(self): ...
+    # TODO
+    #def itererate_modules(self): ...
 
     def allocate_memory(self, size: int) -> int:
         """
