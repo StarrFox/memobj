@@ -1,6 +1,6 @@
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Any, Self, Sequence
+from typing import TYPE_CHECKING, Callable, Any, Literal, Self
 from logging import getLogger
 from functools import cached_property
 
@@ -24,7 +24,7 @@ def _debug_print_disassembly(
     *,
     name: str | None = None,
     callback: Callable[[str], Any] = print,
-    bitness: int = 64
+    bitness: Literal[64] | Literal[32] = 64
 ):
     decoder = Decoder(bitness, code, ip=instruction_pointer)
 
@@ -46,7 +46,7 @@ def instructions_to_code(
     instructions: list[Instruction],
     instruction_pointer: int,
     *,
-    bitness: int = 64
+    bitness: Literal[64] | Literal[32] = 64
 ):
     encoder = BlockEncoder(bitness)
     encoder.add_many(instructions)
@@ -135,13 +135,15 @@ class Hook:
         self._active = False
 
 
-# TODO: add 32-bit support
 class JmpHook(Hook):
     PATTERN: regex.Pattern | bytes | None = None
     MODULE: str | None = None
     PRESERVE_RAX: bool = True
 
     def __init__(self, process: "Process"):
+        if not process.process_64_bit:
+            self.PRESERVE_RAX = False
+
         super().__init__(process)
         # (address, code)
         self._original_code: tuple[int, bytes] | None = None
@@ -185,13 +187,15 @@ class JmpHook(Hook):
         hook_instructions = self.get_code()
         hook_instructions = head + hook_instructions + tail
 
+        bitness = 64 if self.process.process_64_bit else 32
+
         allocation_size = sum(map(len, hook_instructions))
         hook_allocation = self.allocate_variable("hook_site", allocation_size)
-        hook_code = instructions_to_code(hook_instructions, hook_allocation.address)
+        hook_code = instructions_to_code(hook_instructions, hook_allocation.address, bitness=bitness)
         self.process.write_memory(hook_allocation.address, hook_code)
 
         jump_instructions = self.get_jump_code(hook_allocation.address, noops)
-        jump_code = instructions_to_code(jump_instructions, target_address)
+        jump_code = instructions_to_code(jump_instructions, target_address, bitness=bitness)
         self.process.write_memory(target_address, jump_code)
 
     def unhook(self):
@@ -202,10 +206,16 @@ class JmpHook(Hook):
     @cached_property
     def _jump_needed(self) -> int:
         if not self.PRESERVE_RAX:
-            # mov rax,0x1122334455667788
-            # jmp rax
-            return 12
+            if self.process.process_64_bit:
+                # mov rax,0x1122334455667788
+                # jmp rax
+                return 12
+            else:
+                # jmp 0xFFFF_FFFF (E9 FF FF FF FF)
+                return 5
         else:
+            if not self.process.process_64_bit:
+                raise RuntimeError("somehow in preserve rax code for non-64 bit process hook")
             # NOTE: these movs are 10 each which is quite bad
             # push rax
             # mov rax,0x1122334455667788
@@ -215,6 +225,9 @@ class JmpHook(Hook):
 
     def get_hook_head(self) -> list[Instruction]:
         if self.PRESERVE_RAX:
+            if not self.process.process_64_bit:
+                raise RuntimeError("somehow in preserve rax code for non-64 bit process hook")
+
             head = [
                 Instruction.create_reg(
                     Code.POP_R64,
@@ -230,11 +243,17 @@ class JmpHook(Hook):
         position = 0
         original_instructions = []
 
+        # TODO: what does this 10 mean? is it just a general guess and what else we might need?
         search_bytes = self.process.read_memory(jump_address, self._jump_needed + 10)
 
         #logger.debug(f"{search_bytes=}")
 
-        decoder = Decoder(64, search_bytes, ip=jump_address)
+        if self.process.process_64_bit:
+            bitness = 64
+        else:
+            bitness = 32
+
+        decoder = Decoder(bitness, search_bytes, ip=jump_address)
 
         for instruction in decoder:
             # NOTE: this is not a None check, Instruction has special bool() handling
@@ -267,15 +286,24 @@ class JmpHook(Hook):
             position += len(instruction)
 
             if position >= self._jump_needed:
-                # - 1 on position is so the `pop rax` is run, - (position - needed) is for the no ops
-                jump_back_instructions = [
-                    Instruction.create_reg_i64(
-                        Code.MOV_R64_IMM64,
-                        Register.RAX,
-                        jump_address + position - (position - self._jump_needed) - (1 if self.PRESERVE_RAX else 0)
-                    ),
-                    Instruction.create_reg(Code.JMP_RM64, Register.RAX),
-                ]
+                if self.process.process_64_bit:
+                    # - 1 on position is so the `pop rax` is run, - (position - needed) is for the no ops
+                    jump_back_instructions = [
+                        # mov rax,jump_back_addr
+                        Instruction.create_reg_i64(
+                            Code.MOV_R64_IMM64,
+                            Register.RAX,
+                            jump_address + position - (position - self._jump_needed) - (1 if self.PRESERVE_RAX else 0)
+                        ),
+                        # jmp rax
+                        Instruction.create_reg(Code.JMP_RM64, Register.RAX),
+                    ]
+
+                else:
+                    # - (position - needed) is for the no ops
+                    jump_back_instructions = [
+                        Instruction.create_branch(Code.JMP_REL32_32, jump_address + position - (position - self._jump_needed))
+                    ]
 
                 if self.PRESERVE_RAX:
                     jump_back_instructions = [
@@ -298,6 +326,9 @@ class JmpHook(Hook):
 
     def get_jump_code(self, hook_address: int, noops_needed: int) -> list[Instruction]:
         if self.PRESERVE_RAX:
+            if self.process.process_64_bit:
+                raise RuntimeError("somehow in preserve rax code for non-64 bit process hook")
+
             jump_instructions = [
                 Instruction.create_reg(
                     Code.PUSH_R64,
@@ -312,14 +343,19 @@ class JmpHook(Hook):
                 Instruction.create_reg(Code.POP_R64, Register.RAX),
             ]
         else:
-            jump_instructions = [
-                Instruction.create_reg_u64(
-                    Code.MOV_R64_IMM64,
-                    Register.RAX,
-                    hook_address,
-                ),
-                Instruction.create_reg(Code.JMP_RM64, Register.RAX),
-            ]
+            if self.process.process_64_bit:
+                jump_instructions = [
+                    Instruction.create_reg_u64(
+                        Code.MOV_R64_IMM64,
+                        Register.RAX,
+                        hook_address,
+                    ),
+                    Instruction.create_reg(Code.JMP_RM64, Register.RAX),
+                ]
+            else:
+                jump_instructions = [
+                    Instruction.create_branch(Code.JMP_REL32_32, hook_address)
+                ]
 
         for _ in range(noops_needed):
             jump_instructions.append(Instruction.create(Code.NOPD))
@@ -378,13 +414,6 @@ def create_capture_hook(
     register_captures: list[RegisterCaptureSettings]
 ) -> type[JmpHook]:
     """Create a capture hook class
-    
-    registers is a set of tuples with the register to capture and
-    the offset to or None for the register value itself
-    
-    123 -> [rcx+123]
-    0 -> [rcx]
-    None -> rcx
 
     Args:
         pattern (regex.Pattern | bytes): Pattern to hook at

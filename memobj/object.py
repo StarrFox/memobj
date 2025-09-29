@@ -51,6 +51,12 @@ class MemoryObject(metaclass=MemoryObjectMeta):
         if address is not None and address_provider is not None:
             raise ValueError("both address and address_provider cannot be provided")
 
+        if (address is not None or address_provider is not None) and process is None:
+            raise ValueError("process must be provided if address/address_provider are")
+
+        if process is not None and (address is None and address_provider is None):
+            raise ValueError("address/address_provider must be provided if process is")
+
         self._offset = offset
         self._base_address = address
         self._address_provider = address_provider
