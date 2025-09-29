@@ -405,24 +405,69 @@ class RegisterCaptureSettings:
     offset: int = 0
 
 
-# TODO: remove the offset stuff from register capture, it's useless
 # NOTE: this registertype is kinda mid, we may need to provide our own
 def create_capture_hook(
     pattern: regex.Pattern | bytes,
     module: str,
+    bitness: Literal[32] | Literal[64],
     *,
-    register_captures: list[RegisterCaptureSettings]
+    register_captures: list[RegisterCaptureSettings],
 ) -> type[JmpHook]:
     """Create a capture hook class
 
     Args:
         pattern (regex.Pattern | bytes): Pattern to hook at
         module (str): Module to search in
+        bitness (int): What bitness of hook to create
         register_captures (list[RegisterCaptureSettings]): Registers to capture
 
     Returns:
         type[JmpHook]: The created capture hook
     """
+
+    if bitness == 64:
+        return _create_capture_hook_64bit(pattern, module, register_captures)
+    else:
+        return _create_capture_hook_32bit(pattern, module, register_captures)
+
+
+def _create_capture_hook_32bit(pattern: regex.Pattern | bytes, module: str, register_captures: list[RegisterCaptureSettings]):
+    class CaptureHook(JmpHook):
+        PATTERN = pattern
+        MODULE = module
+
+        def get_code(self) -> list[Instruction]:
+            instructions: list[Instruction] = []
+
+            for register_setting in register_captures:
+                name = get_register_name(register_setting.register)
+                capture = self.allocate_variable(f"{name}_capture", 4)
+
+                if register_setting.derefference is True:
+                    instructions += [
+                        # push <reg>
+                        Instruction.create_reg(Code.PUSH_R32, register_setting.register),
+                        # mov <reg>,[<reg>+<offset>]
+                        Instruction.create_reg_mem(Code.MOV_R32_RM32, register_setting.register, MemoryOperand(register_setting.register, displ=register_setting.offset, displ_size=4)),
+                        # mov [<capture_addr>],<reg>
+                        Instruction.create_mem_reg(Code.MOV_RM32_R32, MemoryOperand(displ=capture.address, displ_size=4), register_setting.register),
+                        # pop <reg>
+                        Instruction.create_reg(Code.POP_R32, register_setting.register),
+                    ]
+
+
+                else:
+                    # mov rax,<reg>
+                    instructions.append(
+                        Instruction.create_mem_reg(Code.MOV_RM32_R32, MemoryOperand(displ=capture.address, displ_size=4), register_setting.register)
+                    )
+
+            return instructions
+        
+    return CaptureHook
+
+
+def _create_capture_hook_64bit(pattern: regex.Pattern | bytes, module: str, register_captures: list[RegisterCaptureSettings]):
     for register_setting in register_captures:
         if register_setting.register == Register.RAX:
             rax_register = register_setting
@@ -443,30 +488,15 @@ def create_capture_hook(
             # we need to get rax first since it's used to mov the rest
             if rax_register is not None:
                 rax_capture = self.allocate_variable("RAX_capture", 8)    
-                if rax_register.derefference is True and rax_register.offset == 0:
-                    # mov rax,[rax]
+                if rax_register.derefference is True:
+                    # mov rax,[rax+<offset>]
                     instructions.append(
                         Instruction.create_reg_mem(
                         Code.MOV_R64_RM64,
                         Register.RAX,
-                        MemoryOperand(Register.RAX, displ_size=8)
+                        MemoryOperand(Register.RAX, displ=rax_register.offset, displ_size=8)
                         )
                     )
-                elif rax_register.derefference is False:
-                    # mov rax,rax
-                    instructions.append(Instruction.create_mem_reg(
-                        Code.MOV_MOFFS64_RAX,
-                        MemoryOperand(displ=rax_capture.address, displ_size=8),
-                        Register.RAX,
-                    ))
-                else:
-                    # mov rax,[rax+<offset>]
-                    instructions.append(
-                        Instruction.create_reg_mem(
-                            Code.MOV_R64_RM64,
-                            Register.RAX,
-                            MemoryOperand(Register.RAX, displ=rax_register.offset, displ_size=8),
-                        ))
 
                 # mov [<addr>],rax
                 instructions.append(Instruction.create_mem_reg(
@@ -479,17 +509,18 @@ def create_capture_hook(
                 name = get_register_name(register_setting.register)
                 capture = self.allocate_variable(f"{name}_capture", 8)
 
-                if register_setting.derefference is True and register_setting.offset == 0:
-                    # mov rax,[<reg>]
+                if register_setting.derefference is True:
+                    # NOTE: this doesn't work for RSP
+                    # mov rax,[<reg>+<offset>]
                     instructions.append(
                         Instruction.create_reg_mem(
                         Code.MOV_R64_RM64,
                         Register.RAX,
-                        MemoryOperand(register_setting.register, displ_size=8)
+                        MemoryOperand(register_setting.register, displ=register_setting.offset, displ_size=8)
                         )
                     )
 
-                elif register_setting.derefference is False:
+                else:
                     # mov rax,<reg>
                     instructions.append(
                         Instruction.create_reg_reg(
@@ -498,21 +529,7 @@ def create_capture_hook(
                             register_setting.register,
                         )
                     )
-                else:
-                    offset = register_setting.offset
 
-                    # TODO: make sure to account for 32 bit here if support is added
-                    if register_setting.register == Register.RSP:
-                        offset += 8 # push rax before moves
-
-                    # mov rax,[<reg>+<offset>]
-                    instructions.append(
-                        Instruction.create_reg_mem(
-                            Code.MOV_R64_RM64,
-                            Register.RAX,
-                            MemoryOperand(base=register_setting.register, displ=offset, displ_size=8),
-                        )
-                    )
 
                 instructions.append(
                     Instruction.create_mem_reg(
