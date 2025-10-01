@@ -138,7 +138,7 @@ class Pointer(MemoryProperty):
 
             for attribute_name in self._pointed_type.__memory_properties__.keys():
                 setattr(
-                    self._pointed_type, attribute_name, getattr(value, attribute_name)
+                    instance, attribute_name, getattr(value, attribute_name)
                 )
 
         elif isinstance(self._pointed_type, str):
