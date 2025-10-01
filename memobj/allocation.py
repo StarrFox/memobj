@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, Any
+from utils import Type, get_type_size
 
 
 if TYPE_CHECKING:
@@ -6,9 +7,10 @@ if TYPE_CHECKING:
 
 
 class Allocation:
-    def __init__(self, address: int, process: "Process"):
+    def __init__(self, address: int, process: "Process", size: int):
         self.address = address
         self.process = process
+        self.size = size
 
         self._is_closed: bool = False
 
@@ -31,6 +33,18 @@ class Allocation:
 
         self.process.free_memory(self.address)
         self._is_closed = True
+
+    def read_typed(self, read_type: Type) -> Any:
+        if (type_size := get_type_size(read_type)) != self.size:
+            raise ValueError(f"{read_type} size ({type_size}) does not match allocation size ({self.size})")
+
+        return self.process.read_typed(self.address, read_type)
+
+    def write_typed(self, write_type: Type) -> None:
+        if (type_size := get_type_size(write_type)) != self.size:
+            raise ValueError(f"Write type ({type_size}) does not match allocation size ({self.size})")
+
+        return self.process.write_typed(self.address, write_type)
 
 
 class Allocator:
@@ -62,7 +76,7 @@ class Allocator:
 
     def allocate(self, size: int) -> Allocation:
         address = self.process.allocate_memory(size)
-        allocation = Allocation(address, self.process)
+        allocation = Allocation(address, self.process, size)
         self.allocations.append(allocation)
         return allocation
 
