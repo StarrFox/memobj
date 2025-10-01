@@ -18,7 +18,14 @@ class ValueWaiter(Generic[T]):
         """
         self.callback = callback
 
-    def wait_for_value(self, value: T, *, timeout: float | None = None, sleep_time: float = 0.5, inverse: bool = False) -> tuple[T, float]:
+    def wait_for_value(
+        self,
+        value: T,
+        *,
+        timeout: float | None = None,
+        sleep_time: float = 0.5,
+        inverse: bool = False,
+    ) -> tuple[T, float]:
         """Wait for callback to return a value
 
         Args:
@@ -31,7 +38,7 @@ class ValueWaiter(Generic[T]):
             TimeoutError: if we passed the timeout
 
         Returns:
-            returns the value and how long we waited for it 
+            returns the value and how long we waited for it
         """
         elapsed: float = 0.0
         current = self.callback()
@@ -46,12 +53,18 @@ class ValueWaiter(Generic[T]):
             elapsed += sleep_time
             if timeout and elapsed > timeout:
                 raise TimeoutError(f"ran out of time waiting for value {value}")
-                
+
             current = self.callback()
 
         return current, elapsed
 
-    def yield_changes(self, *, amount: int | None = None, timeout: float | None = None, sleep_time: float = 0.5):
+    def yield_changes(
+        self,
+        *,
+        amount: int | None = None,
+        timeout: float | None = None,
+        sleep_time: float = 0.5,
+    ):
         """Yield values from the callback as they change
 
         Args:
@@ -71,7 +84,12 @@ class ValueWaiter(Generic[T]):
             if amount and results >= amount:
                 break
 
-            value, per_elapsed = self.wait_for_value(value, timeout=(timeout - elapsed) if timeout else None, sleep_time=sleep_time, inverse=True)
+            value, per_elapsed = self.wait_for_value(
+                value,
+                timeout=(timeout - elapsed) if timeout else None,
+                sleep_time=sleep_time,
+                inverse=True,
+            )
             yield value
 
             elapsed += per_elapsed
@@ -89,6 +107,7 @@ class TypeFormat(Enum):
     """
     Byte sized based types
     """
+
     # struct calls this char but they're trolling
     byte = "c"
     s1 = "b"

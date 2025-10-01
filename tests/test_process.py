@@ -8,6 +8,7 @@ def test_get_module_name(process):
 def test_get_module_named(process):
     process.get_module_named("python.exe")
 
+
 # TODO: find a version independent way to test this
 # def test_scan_memory_module(process):
 #     test = process.scan_memory(

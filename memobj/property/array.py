@@ -8,8 +8,9 @@ class Array(MemoryProperty):
     def __init__(
         self,
         offset: int | None,
-        element_type: MemoryProperty, *,
-        count: int | MemoryProperty | None = None
+        element_type: MemoryProperty,
+        *,
+        count: int | MemoryProperty | None = None,
     ):
         super().__init__(offset)
 
@@ -27,7 +28,9 @@ class Array(MemoryProperty):
             return self._count
 
         else:
-            raise NotImplementedError("missing count requires overriden .element_count() impl")
+            raise NotImplementedError(
+                "missing count requires overriden .element_count() impl"
+            )
 
     def from_memory(self) -> Any:
         elements = []

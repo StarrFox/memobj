@@ -9,7 +9,7 @@ class Allocation:
     def __init__(self, address: int, process: "Process"):
         self.address = address
         self.process = process
-        
+
         self._is_closed: bool = False
 
     def __repr__(self) -> str:
@@ -17,7 +17,7 @@ class Allocation:
 
     def __enter__(self) -> Self:
         return self
-    
+
     def __exit__(self, *_):
         self.free()
 
@@ -38,7 +38,7 @@ class Allocator:
     with Allocator(process) as allocator:
         with allocator.allocate() as allocation:
             # do something with allocation
-        
+
         allocation = allocator.allocate()
     """
 
@@ -52,7 +52,7 @@ class Allocator:
         if self._is_closed:
             raise ValueError("Cannot reuse a closed allocator")
         return self
-    
+
     def __exit__(self, *_):
         self.close()
 
@@ -69,7 +69,7 @@ class Allocator:
     def close(self):
         if self._is_closed:
             raise ValueError("Cannot close an already closed allocator")
-        
+
         for allocation in self.allocations:
             if not allocation.closed:
                 allocation.free()

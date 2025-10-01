@@ -15,6 +15,7 @@ Module(...)
     .process (multi-process helper)
 
 """
+
 import ctypes
 
 from typing import Self, Iterator, TYPE_CHECKING
@@ -44,7 +45,9 @@ class WindowsModule(Module):
         """
         with CheckWindowsOsError():
             # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot
-            module_snapshot = ctypes.windll.kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, process.process_id)
+            module_snapshot = ctypes.windll.kernel32.CreateToolhelp32Snapshot(
+                TH32CS_SNAPMODULE, process.process_id
+            )
 
             if module_snapshot == INVALID_HANDLE_VALUE:
                 raise ValueError("Creating module snapshot failed")
@@ -53,22 +56,31 @@ class WindowsModule(Module):
             module_entry.dwSize = ctypes.sizeof(ModuleEntry32)
 
             # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-module32first
-            success = ctypes.windll.kernel32.Module32First(module_snapshot, ctypes.byref(module_entry))
+            success = ctypes.windll.kernel32.Module32First(
+                module_snapshot, ctypes.byref(module_entry)
+            )
 
             if success == 0:
                 raise ValueError("Get first module failed")
-            
+
             yield module_entry
 
             # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-module32next
-            while ctypes.windll.kernel32.Module32Next(module_snapshot, ctypes.byref(module_entry)) != 0:
+            while (
+                ctypes.windll.kernel32.Module32Next(
+                    module_snapshot, ctypes.byref(module_entry)
+                )
+                != 0
+            ):
                 yield module_entry
 
             # https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-closehandle
             ctypes.windll.kernel32.CloseHandle(module_snapshot)
 
     @classmethod
-    def from_name(cls, process: "WindowsProcess", name: str, *, ignore_case: bool = True) -> Self:
+    def from_name(
+        cls, process: "WindowsProcess", name: str, *, ignore_case: bool = True
+    ) -> Self:
         if ignore_case:
             name = name.lower()
 
@@ -117,11 +129,11 @@ class WindowsModule(Module):
         for export in portable_executable.DIRECTORY_ENTRY_EXPORT.symbols:  # type: ignore
             if export.name:
                 symbols[export.name.decode()] = export.address + self.base_address
-            
+
             else:
-                symbols[f"Ordinal {export.ordinal}"] = export.address + self.base_address
+                symbols[f"Ordinal {export.ordinal}"] = (
+                    export.address + self.base_address
+                )
 
         self._symbols = symbols
         return symbols
-
-

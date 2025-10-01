@@ -9,7 +9,14 @@ if TYPE_CHECKING:
 class MemoryObjectMeta(type):
     # TODO: move to __init_subclass__?
     # noinspection PyMethodParameters
-    def __new__(cls, class_name: str, superclasses: tuple[type], attributed_dict: dict, *args, **kwargs):
+    def __new__(
+        cls,
+        class_name: str,
+        superclasses: tuple[type],
+        attributed_dict: dict,
+        *args,
+        **kwargs,
+    ):
         if not superclasses:
             return super().__new__(cls, class_name, superclasses, attributed_dict)
 
@@ -41,12 +48,12 @@ class MemoryObject(metaclass=MemoryObjectMeta):
     __memory_properties__ = {}
 
     def __init__(
-            self,
-            offset: Union[int, None] = None,
-            *,
-            address: Union[int, None] = None,
-            address_provider: Union[Callable[[], int], None] = None,
-            process: Union["Process", "WindowsProcess", None] = None,
+        self,
+        offset: Union[int, None] = None,
+        *,
+        address: Union[int, None] = None,
+        address_provider: Union[Callable[[], int], None] = None,
+        process: Union["Process", "WindowsProcess", None] = None,
     ):
         if address is not None and address_provider is not None:
             raise ValueError("both address and address_provider cannot be provided")
@@ -83,14 +90,19 @@ class MemoryObject(metaclass=MemoryObjectMeta):
             raise ValueError(f"No registered MemoryObject named {class_name}")
 
     @staticmethod
-    def _register_string_class_lookup(type_instance: type["MemoryObject"], replace: bool = False):
+    def _register_string_class_lookup(
+        type_instance: type["MemoryObject"], replace: bool = False
+    ):
         class_name = type_instance.__name__
         if MemoryObject.__memory_object_instances__.get(class_name) and not replace:
-            raise NameError(f"You can only have one MemoryObject named {type_instance.__name__}")
+            raise NameError(
+                f"You can only have one MemoryObject named {type_instance.__name__}"
+            )
 
         MemoryObject.__memory_object_instances__[class_name] = type_instance
 
     if not TYPE_CHECKING:
+
         def __getattribute__(self, name):
             attr = super().__getattribute__(name)
 

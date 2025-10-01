@@ -12,7 +12,9 @@ def get_address_of_ctypes_obj(obj, pointer_format):
 def test_simple_data(process):
     test_value = ctypes.c_int32(23)
 
-    test_value_address = get_address_of_ctypes_obj(test_value, process.pointer_format_string)
+    test_value_address = get_address_of_ctypes_obj(
+        test_value, process.pointer_format_string
+    )
 
     class Test(MemoryObject):
         other = SimpleData(0x0, format_string="i")
@@ -26,7 +28,9 @@ def test_simple_data_pointer(process):
     test_value = ctypes.c_int32(23)
     pointer_to_test_value = ctypes.pointer(test_value)
 
-    test_value_address = get_address_of_ctypes_obj(pointer_to_test_value, process.pointer_format_string)
+    test_value_address = get_address_of_ctypes_obj(
+        pointer_to_test_value, process.pointer_format_string
+    )
 
     class Test(MemoryObject, replace=True):
         other = Pointer(0x0, SimpleData(format_string="i"))
@@ -40,7 +44,9 @@ def test_simple_data_dereffed_pointer(process):
     test_value = ctypes.c_int32(23)
     pointer_to_test_value = ctypes.pointer(test_value)
 
-    test_value_address = get_address_of_ctypes_obj(pointer_to_test_value, process.pointer_format_string)
+    test_value_address = get_address_of_ctypes_obj(
+        pointer_to_test_value, process.pointer_format_string
+    )
 
     class Test(MemoryObject, replace=True):
         other = DereffedPointer(0x0, SimpleData(format_string="i"))
@@ -55,7 +61,9 @@ def test_nested_object(process):
     pointer_to_test_value = ctypes.pointer(test_value)
 
     # gets the address of the pointer
-    test_value_address = get_address_of_ctypes_obj(pointer_to_test_value, process.pointer_format_string)
+    test_value_address = get_address_of_ctypes_obj(
+        pointer_to_test_value, process.pointer_format_string
+    )
 
     class OtherTest(MemoryObject, replace=True):
         value = SimpleData(0x0, format_string="i")
@@ -73,7 +81,9 @@ def test_nested_object_forward_ref(process):
     pointer_to_test_value = ctypes.pointer(test_value)
 
     # gets the address of the pointer
-    test_value_address = get_address_of_ctypes_obj(pointer_to_test_value, process.pointer_format_string)
+    test_value_address = get_address_of_ctypes_obj(
+        pointer_to_test_value, process.pointer_format_string
+    )
 
     class Test(MemoryObject, replace=True):
         other: Pointer = Pointer(0x0, "OtherTest")

@@ -12,7 +12,9 @@ from memobj.utils import ProcessEndianess, TypeFormat
 
 
 # TODO: switch to type statements when we drop 3.11 (TypeAlias is depreciated)
-FormatStringInt: TypeAlias = Literal["b", "B", "h", "H", "i", "I", "l", "L", "q", "Q", "n", "N", "P"]
+FormatStringInt: TypeAlias = Literal[
+    "b", "B", "h", "H", "i", "I", "l", "L", "q", "Q", "n", "N", "P"
+]
 FormatStringFloat: TypeAlias = Literal["e", "f", "d"]
 FormatStringBool: TypeAlias = Literal["?"]
 FormatStringBytes: TypeAlias = Literal["c", "s", "p"]
@@ -99,7 +101,7 @@ class Process:
         raise NotImplementedError()
 
     # TODO
-    #def itererate_modules(self): ...
+    # def itererate_modules(self): ...
 
     def allocate_memory(self, size: int) -> int:
         """
@@ -145,7 +147,9 @@ class Process:
         """
         raise NotImplementedError()
 
-    def scan_memory(self, pattern: regex.Pattern | bytes, *, module: str | None = None) -> list[int]:
+    def scan_memory(
+        self, pattern: regex.Pattern | bytes, *, module: str | None = None
+    ) -> list[int]:
         """
         Scan memory for a regex pattern
 
@@ -158,7 +162,9 @@ class Process:
         """
         raise NotImplementedError()
 
-    def scan_one(self, pattern: regex.Pattern | bytes, *, module: str | None = None) -> int:
+    def scan_one(
+        self, pattern: regex.Pattern | bytes, *, module: str | None = None
+    ) -> int:
         """
         Scan memory for a regex pattern and error if one address was not found
 
@@ -170,13 +176,13 @@ class Process:
         Address found
         """
         results = self.scan_memory(pattern, module=module)
-        
+
         if result_len := len(results) == 0:
-            raise ValueError(F"No matches found for pattern {pattern!r}")
-        
+            raise ValueError(f"No matches found for pattern {pattern!r}")
+
         elif result_len > 1:
             raise ValueError(f"Multiple matches found for pattern {pattern!r}")
-        
+
         return results[0]
 
     def read_formatted(self, address: int, format_string: str) -> tuple[Any] | Any:
@@ -206,7 +212,7 @@ class Process:
         address: int,
         format_string: FormatStringInt,
         *,
-        endianess: ProcessEndianess = ProcessEndianess.native
+        endianess: ProcessEndianess = ProcessEndianess.native,
     ) -> int: ...
 
     @typing.overload
@@ -215,7 +221,7 @@ class Process:
         address: int,
         format_string: FormatStringBool,
         *,
-        endianess: ProcessEndianess = ProcessEndianess.native
+        endianess: ProcessEndianess = ProcessEndianess.native,
     ) -> bool: ...
 
     @typing.overload
@@ -224,7 +230,7 @@ class Process:
         address: int,
         format_string: FormatStringBytes,
         *,
-        endianess: ProcessEndianess = ProcessEndianess.native
+        endianess: ProcessEndianess = ProcessEndianess.native,
     ) -> bytes: ...
 
     @typing.overload
@@ -233,7 +239,7 @@ class Process:
         address: int,
         format_string: FormatStringFloat,
         *,
-        endianess: ProcessEndianess = ProcessEndianess.native
+        endianess: ProcessEndianess = ProcessEndianess.native,
     ) -> float: ...
 
     # NOTE: the order of these matters (the any default needs to be last)
@@ -243,7 +249,7 @@ class Process:
         address: int,
         format_string: str,
         *,
-        endianess: ProcessEndianess = ProcessEndianess.native
+        endianess: ProcessEndianess = ProcessEndianess.native,
     ) -> Any: ...
 
     def read_formatted_single(
@@ -252,10 +258,12 @@ class Process:
         format_string: str,
         *,
         # TODO: should the default be native?
-        endianess: ProcessEndianess = ProcessEndianess.native
+        endianess: ProcessEndianess = ProcessEndianess.native,
     ) -> Any:
         if len(format_string) != 1:
-            raise ValueError(f"format_string should be a single character not {format_string}")
+            raise ValueError(
+                f"format_string should be a single character not {format_string}"
+            )
 
         # we don't just include endianess in the format string to make typing easier
         match endianess:
@@ -267,10 +275,12 @@ class Process:
                 endianess_string = ">"
 
         combined_format = endianess_string + format_string
-        
+
         return self.read_formatted(address, combined_format)
 
-    def write_formatted(self, address: int, format_string: str, value: tuple[Any] | Any):
+    def write_formatted(
+        self, address: int, format_string: str, value: tuple[Any] | Any
+    ):
         """
         Write formatted bytes to memory, format_string is passed directly to struct.pack
 
@@ -311,7 +321,7 @@ class Process:
         *,
         endianess: ProcessEndianess = ProcessEndianess.native,
     ) -> None: ...
-    
+
     @typing.overload
     def write_formatted_single(
         self,
@@ -343,7 +353,9 @@ class Process:
         endianess: ProcessEndianess = ProcessEndianess.native,
     ) -> None:
         if len(format_string) != 1:
-            raise ValueError(f"format_string should be a single character not {format_string}")
+            raise ValueError(
+                f"format_string should be a single character not {format_string}"
+            )
 
         # we don't just include endianess in the format string to make typing easier
         match endianess:

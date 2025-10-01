@@ -20,9 +20,9 @@ class Void(MemoryProperty):
 
 class Pointer(MemoryProperty):
     def __init__(
-            self,
-            offset: int | None,
-            pointed_type: Union[str, MemoryProperty, "MemoryObject", type["MemoryObject"]]
+        self,
+        offset: int | None,
+        pointed_type: Union[str, MemoryProperty, "MemoryObject", type["MemoryObject"]],
     ):
         super().__init__(offset)
 
@@ -72,7 +72,9 @@ class Pointer(MemoryProperty):
 
         elif isinstance(self._pointed_type, str):
             # noinspection PyProtectedMember
-            typed_object_type = MemoryObject._resolve_string_class_lookup(self._pointed_type)
+            typed_object_type = MemoryObject._resolve_string_class_lookup(
+                self._pointed_type
+            )
 
             self._pointed_type = typed_object_type()
 
@@ -99,7 +101,9 @@ class Pointer(MemoryProperty):
             return self._pointed_type.from_memory()
 
         else:
-            raise TypeError("pointed-to type is neither MemoryObject nor MemoryProperty")
+            raise TypeError(
+                "pointed-to type is neither MemoryObject nor MemoryProperty"
+            )
 
     def to_memory(self, value: Any):
         if not isinstance(value, int):
@@ -124,18 +128,24 @@ class Pointer(MemoryProperty):
             self._pointed_type.memobj_process = self.process
 
             for attribute_name in self._pointed_type.__memory_properties__.keys():
-                setattr(self._pointed_type, attribute_name, getattr(value, attribute_name))
+                setattr(
+                    self._pointed_type, attribute_name, getattr(value, attribute_name)
+                )
 
         # TODO: is there a better way to check for this
         elif type(self._pointed_type) is MemoryObjectMeta:
             instance = self._pointed_type(address=addr, process=self.process)
 
             for attribute_name in self._pointed_type.__memory_properties__.keys():
-                setattr(self._pointed_type, attribute_name, getattr(value, attribute_name))
+                setattr(
+                    self._pointed_type, attribute_name, getattr(value, attribute_name)
+                )
 
         elif isinstance(self._pointed_type, str):
             # noinspection PyProtectedMember
-            typed_object_type = MemoryObject._resolve_string_class_lookup(self._pointed_type)
+            typed_object_type = MemoryObject._resolve_string_class_lookup(
+                self._pointed_type
+            )
 
             self._pointed_type = typed_object_type
 
@@ -154,7 +164,9 @@ class Pointer(MemoryProperty):
             self._pointed_type.to_memory(value)
 
         else:
-            raise TypeError("pointed-to type is neither MemoryObject nor MemoryProperty")
+            raise TypeError(
+                "pointed-to type is neither MemoryObject nor MemoryProperty"
+            )
 
     def memory_size(self) -> int:
         return self.pointer_size

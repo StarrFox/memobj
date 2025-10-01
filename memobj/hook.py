@@ -5,7 +5,15 @@ from logging import getLogger
 from functools import cached_property
 
 import regex
-from iced_x86 import Instruction, Decoder, Code, MemoryOperand, Register, BlockEncoder, FlowControl
+from iced_x86 import (
+    Instruction,
+    Decoder,
+    Code,
+    MemoryOperand,
+    Register,
+    BlockEncoder,
+    FlowControl,
+)
 from iced_x86._iced_x86_py import Register as RegisterType
 
 from memobj.allocation import Allocator, Allocation
@@ -24,7 +32,7 @@ def _debug_print_disassembly(
     *,
     name: str | None = None,
     callback: Callable[[str], Any] = print,
-    bitness: Literal[64] | Literal[32] = 64
+    bitness: Literal[64] | Literal[32] = 64,
 ):
     decoder = Decoder(bitness, code, ip=instruction_pointer)
 
@@ -46,7 +54,7 @@ def instructions_to_code(
     instructions: list[Instruction],
     instruction_pointer: int,
     *,
-    bitness: Literal[64] | Literal[32] = 64
+    bitness: Literal[64] | Literal[32] = 64,
 ):
     encoder = BlockEncoder(bitness)
     encoder.add_many(instructions)
@@ -72,7 +80,7 @@ class Hook:
     def __enter__(self) -> Self:
         self.activate()
         return self
-    
+
     def __exit__(self, *_):
         self.deactivate()
 
@@ -153,12 +161,19 @@ class JmpHook(Hook):
             raise ValueError(f"PATTERN not set on {self.__class__.__name__}")
 
         if self.MODULE is None:
-            logger.warning(f"MODULE not set for {self.__class__.__name__} scanning entire memory space")
+            logger.warning(
+                f"MODULE not set for {self.__class__.__name__} scanning entire memory space"
+            )
 
         return super().activate()
 
     # TODO: move the delayed dealloc stuff to Hook class?
-    def deactivate(self, *, close_allocator: bool = True, delayed_close_allocator_seconds: float | None = None):
+    def deactivate(
+        self,
+        *,
+        close_allocator: bool = True,
+        delayed_close_allocator_seconds: float | None = None,
+    ):
         """Deactivates the hook
 
         Args:
@@ -166,8 +181,10 @@ class JmpHook(Hook):
             delayed_close_allocator_seconds (float | None, optional): how many second to delay body deallocation. Defaults to None.
         """
         if close_allocator is False and delayed_close_allocator_seconds is not None:
-            raise ValueError("close_allocator cannot be False with a delayed number of seconds")
-        
+            raise ValueError(
+                "close_allocator cannot be False with a delayed number of seconds"
+            )
+
         if close_allocator is True and delayed_close_allocator_seconds is not None:
             # this will write over the outside jmp so the body is no longer entered
             super().deactivate(close_allocator=False)
@@ -191,11 +208,15 @@ class JmpHook(Hook):
 
         allocation_size = sum(map(len, hook_instructions))
         hook_allocation = self.allocate_variable("hook_site", allocation_size)
-        hook_code = instructions_to_code(hook_instructions, hook_allocation.address, bitness=bitness)
+        hook_code = instructions_to_code(
+            hook_instructions, hook_allocation.address, bitness=bitness
+        )
         self.process.write_memory(hook_allocation.address, hook_code)
 
         jump_instructions = self.get_jump_code(hook_allocation.address, noops)
-        jump_code = instructions_to_code(jump_instructions, target_address, bitness=bitness)
+        jump_code = instructions_to_code(
+            jump_instructions, target_address, bitness=bitness
+        )
         self.process.write_memory(target_address, jump_code)
 
     def unhook(self):
@@ -215,7 +236,9 @@ class JmpHook(Hook):
                 return 5
         else:
             if not self.process.process_64_bit:
-                raise RuntimeError("somehow in preserve rax code for non-64 bit process hook")
+                raise RuntimeError(
+                    "somehow in preserve rax code for non-64 bit process hook"
+                )
             # NOTE: these movs are 10 each which is quite bad
             # push rax
             # mov rax,0x1122334455667788
@@ -226,7 +249,9 @@ class JmpHook(Hook):
     def get_hook_head(self) -> list[Instruction]:
         if self.PRESERVE_RAX:
             if not self.process.process_64_bit:
-                raise RuntimeError("somehow in preserve rax code for non-64 bit process hook")
+                raise RuntimeError(
+                    "somehow in preserve rax code for non-64 bit process hook"
+                )
 
             head = [
                 Instruction.create_reg(
@@ -246,7 +271,7 @@ class JmpHook(Hook):
         # TODO: what does this 10 mean? is it just a general guess and what else we might need?
         search_bytes = self.process.read_memory(jump_address, self._jump_needed + 10)
 
-        #logger.debug(f"{search_bytes=}")
+        # logger.debug(f"{search_bytes=}")
 
         if self.process.process_64_bit:
             bitness = 64
@@ -258,29 +283,41 @@ class JmpHook(Hook):
         for instruction in decoder:
             # NOTE: this is not a None check, Instruction has special bool() handling
             if not instruction:
-                raise RuntimeError(f"Got unknown instruction in bytes {position=} {search_bytes=}")
+                raise RuntimeError(
+                    f"Got unknown instruction in bytes {position=} {search_bytes=}"
+                )
 
             control_flow = instruction.flow_control
 
             match control_flow:
                 case FlowControl.NEXT:
                     pass
-                case FlowControl.UNCONDITIONAL_BRANCH | FlowControl.INDIRECT_BRANCH | FlowControl.CONDITIONAL_BRANCH:
+                case (
+                    FlowControl.UNCONDITIONAL_BRANCH
+                    | FlowControl.INDIRECT_BRANCH
+                    | FlowControl.CONDITIONAL_BRANCH
+                ):
                     near_target = instruction.near_branch_target
 
                     if near_target == 0:
-                        raise ValueError(f"Original code contains a far branch: {instruction}")
+                        raise ValueError(
+                            f"Original code contains a far branch: {instruction}"
+                        )
 
                     # TODO: try and fix the jump instead
                     if not near_target < self._jump_needed - position:
-                        raise ValueError(f"Original code contains a near jump outside of captured code: {instruction}")
+                        raise ValueError(
+                            f"Original code contains a near jump outside of captured code: {instruction}"
+                        )
 
                 # TODO: figure out how xbegin works
                 case FlowControl.XBEGIN_XABORT_XEND:
                     pass
 
                 case FlowControl.EXCEPTION:
-                    raise ValueError(f"Could not decode flow control of instruction: {instruction}")
+                    raise ValueError(
+                        f"Could not decode flow control of instruction: {instruction}"
+                    )
 
             original_instructions.append(instruction)
             position += len(instruction)
@@ -293,7 +330,10 @@ class JmpHook(Hook):
                         Instruction.create_reg_i64(
                             Code.MOV_R64_IMM64,
                             Register.RAX,
-                            jump_address + position - (position - self._jump_needed) - (1 if self.PRESERVE_RAX else 0)
+                            jump_address
+                            + position
+                            - (position - self._jump_needed)
+                            - (1 if self.PRESERVE_RAX else 0),
                         ),
                         # jmp rax
                         Instruction.create_reg(Code.JMP_RM64, Register.RAX),
@@ -302,7 +342,10 @@ class JmpHook(Hook):
                 else:
                     # - (position - needed) is for the no ops
                     jump_back_instructions = [
-                        Instruction.create_branch(Code.JMP_REL32_32, jump_address + position - (position - self._jump_needed))
+                        Instruction.create_branch(
+                            Code.JMP_REL32_32,
+                            jump_address + position - (position - self._jump_needed),
+                        )
                     ]
 
                 if self.PRESERVE_RAX:
@@ -327,13 +370,12 @@ class JmpHook(Hook):
     def get_jump_code(self, hook_address: int, noops_needed: int) -> list[Instruction]:
         if self.PRESERVE_RAX:
             if self.process.process_64_bit:
-                raise RuntimeError("somehow in preserve rax code for non-64 bit process hook")
+                raise RuntimeError(
+                    "somehow in preserve rax code for non-64 bit process hook"
+                )
 
             jump_instructions = [
-                Instruction.create_reg(
-                    Code.PUSH_R64,
-                    Register.RAX
-                ),
+                Instruction.create_reg(Code.PUSH_R64, Register.RAX),
                 Instruction.create_reg_u64(
                     Code.MOV_R64_IMM64,
                     Register.RAX,
@@ -431,7 +473,11 @@ def create_capture_hook(
         return _create_capture_hook_32bit(pattern, module, register_captures)
 
 
-def _create_capture_hook_32bit(pattern: regex.Pattern | bytes, module: str, register_captures: list[RegisterCaptureSettings]):
+def _create_capture_hook_32bit(
+    pattern: regex.Pattern | bytes,
+    module: str,
+    register_captures: list[RegisterCaptureSettings],
+):
     class CaptureHook(JmpHook):
         PATTERN = pattern
         MODULE = module
@@ -446,28 +492,49 @@ def _create_capture_hook_32bit(pattern: regex.Pattern | bytes, module: str, regi
                 if register_setting.derefference is True:
                     instructions += [
                         # push <reg>
-                        Instruction.create_reg(Code.PUSH_R32, register_setting.register),
+                        Instruction.create_reg(
+                            Code.PUSH_R32, register_setting.register
+                        ),
                         # mov <reg>,[<reg>+<offset>]
-                        Instruction.create_reg_mem(Code.MOV_R32_RM32, register_setting.register, MemoryOperand(register_setting.register, displ=register_setting.offset, displ_size=4)),
+                        Instruction.create_reg_mem(
+                            Code.MOV_R32_RM32,
+                            register_setting.register,
+                            MemoryOperand(
+                                register_setting.register,
+                                displ=register_setting.offset,
+                                displ_size=4,
+                            ),
+                        ),
                         # mov [<capture_addr>],<reg>
-                        Instruction.create_mem_reg(Code.MOV_RM32_R32, MemoryOperand(displ=capture.address, displ_size=4), register_setting.register),
+                        Instruction.create_mem_reg(
+                            Code.MOV_RM32_R32,
+                            MemoryOperand(displ=capture.address, displ_size=4),
+                            register_setting.register,
+                        ),
                         # pop <reg>
                         Instruction.create_reg(Code.POP_R32, register_setting.register),
                     ]
 
-
                 else:
                     # mov rax,<reg>
                     instructions.append(
-                        Instruction.create_mem_reg(Code.MOV_RM32_R32, MemoryOperand(displ=capture.address, displ_size=4), register_setting.register)
+                        Instruction.create_mem_reg(
+                            Code.MOV_RM32_R32,
+                            MemoryOperand(displ=capture.address, displ_size=4),
+                            register_setting.register,
+                        )
                     )
 
             return instructions
-        
+
     return CaptureHook
 
 
-def _create_capture_hook_64bit(pattern: regex.Pattern | bytes, module: str, register_captures: list[RegisterCaptureSettings]):
+def _create_capture_hook_64bit(
+    pattern: regex.Pattern | bytes,
+    module: str,
+    register_captures: list[RegisterCaptureSettings],
+):
     for register_setting in register_captures:
         if register_setting.register == Register.RAX:
             rax_register = register_setting
@@ -483,27 +550,33 @@ def _create_capture_hook_64bit(pattern: regex.Pattern | bytes, module: str, regi
         MODULE = module
 
         def get_code(self) -> list[Instruction]:
-            instructions: list[Instruction] = [Instruction.create_reg(Code.PUSH_R64, Register.RAX)]
+            instructions: list[Instruction] = [
+                Instruction.create_reg(Code.PUSH_R64, Register.RAX)
+            ]
 
             # we need to get rax first since it's used to mov the rest
             if rax_register is not None:
-                rax_capture = self.allocate_variable("RAX_capture", 8)    
+                rax_capture = self.allocate_variable("RAX_capture", 8)
                 if rax_register.derefference is True:
                     # mov rax,[rax+<offset>]
                     instructions.append(
                         Instruction.create_reg_mem(
-                        Code.MOV_R64_RM64,
-                        Register.RAX,
-                        MemoryOperand(Register.RAX, displ=rax_register.offset, displ_size=8)
+                            Code.MOV_R64_RM64,
+                            Register.RAX,
+                            MemoryOperand(
+                                Register.RAX, displ=rax_register.offset, displ_size=8
+                            ),
                         )
                     )
 
                 # mov [<addr>],rax
-                instructions.append(Instruction.create_mem_reg(
-                            Code.MOV_MOFFS64_RAX,
-                            MemoryOperand(displ=rax_capture.address, displ_size=8),
-                            Register.RAX,
-                        ))
+                instructions.append(
+                    Instruction.create_mem_reg(
+                        Code.MOV_MOFFS64_RAX,
+                        MemoryOperand(displ=rax_capture.address, displ_size=8),
+                        Register.RAX,
+                    )
+                )
 
             for register_setting in register_captures:
                 name = get_register_name(register_setting.register)
@@ -514,9 +587,13 @@ def _create_capture_hook_64bit(pattern: regex.Pattern | bytes, module: str, regi
                     # mov rax,[<reg>+<offset>]
                     instructions.append(
                         Instruction.create_reg_mem(
-                        Code.MOV_R64_RM64,
-                        Register.RAX,
-                        MemoryOperand(register_setting.register, displ=register_setting.offset, displ_size=8)
+                            Code.MOV_R64_RM64,
+                            Register.RAX,
+                            MemoryOperand(
+                                register_setting.register,
+                                displ=register_setting.offset,
+                                displ_size=8,
+                            ),
                         )
                     )
 
@@ -529,7 +606,6 @@ def _create_capture_hook_64bit(pattern: regex.Pattern | bytes, module: str, regi
                             register_setting.register,
                         )
                     )
-
 
                 instructions.append(
                     Instruction.create_mem_reg(
