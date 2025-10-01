@@ -2,10 +2,14 @@ import time
 import struct
 import operator
 from enum import Enum
-from typing import Callable
+from typing import Callable, Generic, TypeVar
 
 
-class ValueWaiter[T]:
+# TODO: remove when dropping 3.11 support
+T = TypeVar("T")
+
+
+class ValueWaiter(Generic[T]):
     def __init__(self, callback: Callable[[], T]):
         """A utility class to wait for changes from a callable
 

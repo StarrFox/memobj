@@ -7,7 +7,7 @@ authors = [
     {name="StarrFox", email="starrfox6312@gmail.com"}
 ]
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "iced-x86>=1.21.0",
     "pefile>=2024.8.26; sys_platform == 'win32'",
