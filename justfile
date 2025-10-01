@@ -1,6 +1,7 @@
-set windows-powershell
+set windows-shell := ["powershell"]
 
 # show this list
+[default]
 default:
     just --list
 
@@ -10,15 +11,16 @@ test:
 
 # does a version bump commit
 [linux]
-bump-commit type=minor: && create-tag
+bump-commit type="minor": && create-tag
     uv version --bump {{type}}
     git commit -am "$(uv version | awk '{print $2}' | xargs echo "bump to")"
     uv version | awk '{print $2}' | xargs git tag
     git push
     git push --tags
 
+# does a version bump commit
 [windows]
-bump-commit type=minor: && create-tag
+bump-commit type="minor": && create-tag
     uv version --bump {{type}}
     git commit -am ("bump to " + (uv version | Select-String -Pattern '\d+\.\d+\.\d+' | ForEach-Object { $_.Matches.Value }))
     git fetch --tags
@@ -33,6 +35,7 @@ create-tag:
     uv version | awk '{print $2}' | xargs git tag
     git push --tags
 
+# creates a new tag for the current version
 [windows]
 create-tag:
     git fetch --tags
@@ -46,6 +49,7 @@ update:
     nix flake update
     uv sync --all-groups --upgrade
 
+# update deps
 [windows]
 update:
     uv sync --all-groups --upgrade
