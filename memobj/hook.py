@@ -1,4 +1,5 @@
 import time
+import itertools
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Any, Literal, Self
 from logging import getLogger
@@ -34,12 +35,26 @@ def _debug_print_disassembly(
     callback("bytes=" + " ".join(map(hex, code)))
 
     for instruction in decoder:
-        callback(f"{instruction.ip:016X} {instruction}; {instruction.code=}")
+        callback(f"{instruction.ip:016X} {instruction}; {instruction.code=} | ({instruction.op_code()})")
 
 
-def _add_instruction_label(label_id: int, instruction: Instruction) -> Instruction:
-    instruction.ip = label_id
-    return instruction
+class _Labeler:
+    def __init__(self, start: int = 1):
+        self.label_counter = itertools.count(start)
+
+    def create(self) -> int:
+        return next(self.label_counter)
+
+    def create_many(self, amount: int):
+        results: list[int] = []
+        for _ in range(amount):
+            results.append(self.create())
+
+        return results
+
+    def add_label(self, label: int, instruction: Instruction) -> Instruction:
+        instruction.ip = label
+        return instruction
 
 
 def instructions_to_code(
@@ -175,6 +190,7 @@ class JmpHook(Hook):
             time.sleep(delayed_close_allocator_seconds)
             # finally deallocate the body
             self.allocator.close()
+            return None
         else:
             return super().deactivate(close_allocator=close_allocator)
 
@@ -366,43 +382,131 @@ class JmpHook(Hook):
         raise NotImplementedError()
 
 
-"""
-123: <block>
-u32 entries
-u32 entry_size
-entry
-entry
-entry
-
-
-push rax
-push r8
-push r9
-mov rax,[rcx]
-mov r8, [123]
-mov r9, [123+4]
-cmp r8,<max_entry_number>
-jz reset
-mov [123+r8*r9+8],rax
-inc r8
-mov [123],r8
-jmp pop_off
-reset:
-mov [123],0x00000000
-pop_off:
-pop rax
-pop r8
-pop r9
-"""
-# class ListMulticapture(JmpHook):
-#     ...
-
-
 @dataclass
 class RegisterCaptureSettings:
     register: RegisterType
     derefference: bool = True
     offset: int = 0
+
+
+"""
+typedef struct {
+    unsigned char read;
+    unsigned char write;
+    unsigned char misses;
+    unsigned char end;
+    unsigned char data[TAPE_SIZE];
+} MemoryTape;
+
+
+[rdi] = read
+[rdi+1] = write
+[rdi+2] = misses
+[rdi+3] = end
+[rdi+4] = data
+add:
+        mov     al, BYTE PTR [rdi+1]
+        mov     dl, BYTE PTR [rdi]
+        mov     cl, BYTE PTR [rdi+3]
+        inc     eax
+        cmp     dl, al
+        je      .L2
+        cmp     al, cl
+        je      .L2
+        movzx   r8d, al
+        mov     BYTE PTR [rdi+4+r8], sil
+        mov     BYTE PTR [rdi+1], al
+.L2:
+        cmp     al, cl
+        sete    cl
+        test    dl, dl
+        je      .L3
+        test    cl, cl
+        je      .L3
+        mov     BYTE PTR [rdi+4], sil
+        mov     BYTE PTR [rdi+1], 0
+        cmp     dl, al
+        jne     .L1
+        jmp     .L4
+.L3:
+        cmp     dl, al
+        jne     .L5
+.L4:
+        inc     BYTE PTR [rdi+2]
+.L5:
+        test    dl, dl
+        jne     .L1
+        test    cl, cl
+        je      .L1
+        inc     BYTE PTR [rdi+2]
+.L1:
+        ret
+
+
+
+class PlayerMultiCapture(ListMultiCapture):
+    CAPTURE_SIZE = 8
+    CAPTURE_MAX = 30
+    CAPTURE_REGISTER = Register.edp
+    PATTERN = ...
+    MODULE = ...
+
+
+
+
+"""
+
+class ListMultiCapture(JmpHook):
+    CAPTURE_SIZE: int
+    CAPTURE_MAX: int
+    CAPTURE_REGISTER: RegisterType
+
+    def get_code(self) -> list[Instruction]:
+        instructions: list[Instruction] = []
+
+        # 4 * 8 for read, write, misses, end
+        # <CAPTURE_MAX> * <CAPTURE_SIZE> 
+        memory_tape = self.allocate_variable("memory_tape", (4 * 8) + (self.CAPTURE_MAX * self.CAPTURE_SIZE))
+
+        labeler = _Labeler()
+
+        L1, L2, L3, L4, L5 = labeler.create_many(5)
+
+        instructions += [
+            Instruction.create_reg_mem(Code.MOV_R8_RM8, Register.AL, MemoryOperand(Register.EDI, displ=1, displ_size=4)),
+            Instruction.create_reg_mem(Code.MOV_R8_RM8, Register.DL, MemoryOperand(Register.EDI)),
+            Instruction.create_reg_mem(Code.MOV_R8_RM8, Register.CL, MemoryOperand(Register.EDI, displ=3, displ_size=4)),
+            Instruction.create_reg(Code.INC_R32, Register.EAX),
+            Instruction.create_reg_reg(Code.CMP_R8_RM8, Register.DL, Register.AL),
+            Instruction.create_branch(Code.JE_REL16, L2),
+            Instruction.create_reg_reg(Code.CMP_R8_RM8, Register.AL, Register.CL),
+            Instruction.create_branch(Code.JE_REL16, L2),
+            Instruction.create_reg_reg(Code.MOVZX_R16_RM8, Register.R8D, Register.AL),
+            Instruction.create_mem_reg(Code.MOV_RM8_R8, MemoryOperand(Register.RDI, Register.R8, displ=4), Register.SIL),
+            Instruction.create_mem_reg(Code.MOV_RM64_R64, MemoryOperand(Register.RDI, displ=1), Register.AL),
+            labeler.add_label(L2, Instruction.create_reg_reg(Code.CMP_R8_RM8, Register.AL, Register.CL)),
+            Instruction.create_reg(Code.SETE_RM8, Register.CL),
+            Instruction.create_reg_reg(Code.TEST_RM8_R8, Register.DL, Register.DL),
+            Instruction.create_branch(Code.JE_REL16, L3),
+            Instruction.create_reg_reg(Code.TEST_RM8_R8, Register.CL, Register.CL),
+            Instruction.create_branch(Code.JE_REL16, L3),
+            Instruction.create_mem_reg(Code.MOV_R64_RM64, MemoryOperand(Register.RDI, displ=4), Register.SIL),
+            Instruction.create_mem_u32(Code.MOV_RM64_IMM32, MemoryOperand(Register.RDI, displ=1), 0),
+            Instruction.create_reg_reg(Code.CMP_R8_RM8, Register.DL, Register.AL),
+            Instruction.create_branch(Code.JNE_REL16, L1),
+            Instruction.create_branch(Code.JMP_REL16, L4),
+            labeler.add_label(L3, Instruction.create_reg_reg(Code.CMP_R8_RM8, Register.DL, Register.AL)),
+            Instruction.create_branch(Code.JNE_REL16, L5),
+            labeler.add_label(L4, Instruction.create_mem(Code.INC_RM64, MemoryOperand(Register.RDI, displ=2))),
+            labeler.add_label(L5, Instruction.create_reg_reg(Code.TEST_RM8_R8, Register.DL, Register.DL)),
+            Instruction.create_branch(Code.JNE_REL16, L1),
+            Instruction.create_reg_reg(Code.TEST_RM8_R8, Register.CL, Register.CL),
+            Instruction.create_branch(Code.JE_REL16, L1),
+            Instruction.create_mem(Code.INC_RM64, MemoryOperand(Register.RDI, displ=2)),
+            labeler.add_label(L1, Instruction.create(Code.RETNQ)),
+        ]
+
+        return instructions
 
 
 # NOTE: this registertype is kinda mid, we may need to provide our own
@@ -444,6 +548,7 @@ def _create_capture_hook_32bit(pattern: regex.Pattern | bytes, module: str, regi
                 capture = self.allocate_variable(f"{name}_capture", 4)
 
                 if register_setting.derefference is True:
+                    # NOTE: this doesn't work for ESP
                     instructions += [
                         # push <reg>
                         Instruction.create_reg(Code.PUSH_R32, register_setting.register),
