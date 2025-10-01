@@ -1,5 +1,4 @@
-from typing import TYPE_CHECKING, Optional, Any, Union
-
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
     from memobj.object import MemoryObject

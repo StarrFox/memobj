@@ -17,11 +17,11 @@ Module(...)
 """
 
 import ctypes
+from typing import TYPE_CHECKING, Iterator, Self
 
-from typing import Self, Iterator, TYPE_CHECKING
 from memobj.process import Module
 
-from .utils import ModuleEntry32, CheckWindowsOsError
+from .utils import CheckWindowsOsError, ModuleEntry32
 
 if TYPE_CHECKING:
     from .process import WindowsProcess

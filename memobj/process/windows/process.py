@@ -8,19 +8,16 @@ from typing import Self, Union
 import regex
 
 from memobj.allocation import Allocator
-from memobj.process.windows.module import WindowsModule
-from memobj.process.windows.utils import (
-    CheckWindowsOsError,
-    WindowsModuleInfo,
-    WindowsMemoryProtection,  # TODO: what was this going to be used for?
-    WindowsMemoryBasicInformation,
-    LUID,
-    LUID_AND_ATTRIBUTES,
-    SingleLUIDAndAttributes,
-    TOKEN_PRIVILEGES,
-    PROCESSENTRY32,
-)
 from memobj.process import Process
+from memobj.process.windows.module import WindowsModule
+from memobj.process.windows.utils import \
+    WindowsMemoryProtection  # TODO: what was this going to be used for?
+from memobj.process.windows.utils import (LUID, LUID_AND_ATTRIBUTES,
+                                          PROCESSENTRY32, TOKEN_PRIVILEGES,
+                                          CheckWindowsOsError,
+                                          SingleLUIDAndAttributes,
+                                          WindowsMemoryBasicInformation,
+                                          WindowsModuleInfo)
 
 
 # TODO: update everything that uses modules to use the new WindowsModule
@@ -302,7 +299,7 @@ class WindowsProcess(Process):
 
     def scan_memory(
         self,
-        pattern: regex.Pattern | bytes,
+        pattern: regex.Pattern[bytes] | bytes,
         *,
         module: Union[str, WindowsModuleInfo, bool, None] = None,
     ) -> list[int]:
@@ -310,9 +307,9 @@ class WindowsProcess(Process):
         Scan memory for a regex pattern
 
         Args:
-            pattern: A regex.Pattern or a byte pattern
+            pattern: A regex.Pattern[bytes] or a byte pattern
             module: Name of a module to exclusively search or a module to search for
-            (True is shortcut for base module)
+            (True is a shortcut for base module)
 
         Returns:
         A list of addresses that matched

@@ -1,9 +1,8 @@
-import time
-import struct
 import operator
+import struct
+import time
 from enum import Enum
 from typing import Callable, Generic, TypeVar
-
 
 # TODO: remove when dropping 3.11 support
 T = TypeVar("T")

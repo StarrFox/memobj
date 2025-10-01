@@ -1,23 +1,15 @@
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Any, Literal, Self
-from logging import getLogger
 from functools import cached_property
+from logging import getLogger
+from typing import TYPE_CHECKING, Any, Callable, Literal, Self
 
 import regex
-from iced_x86 import (
-    Instruction,
-    Decoder,
-    Code,
-    MemoryOperand,
-    Register,
-    BlockEncoder,
-    FlowControl,
-)
+from iced_x86 import (BlockEncoder, Code, Decoder, FlowControl, Instruction,
+                      MemoryOperand, Register)
 from iced_x86._iced_x86_py import Register as RegisterType
 
-from memobj.allocation import Allocator, Allocation
-
+from memobj.allocation import Allocation, Allocator
 
 if TYPE_CHECKING:
     from memobj.process import Process
@@ -42,7 +34,9 @@ def _debug_print_disassembly(
     callback("bytes=" + " ".join(map(hex, code)))
 
     for instruction in decoder:
-        callback(f"{instruction.ip:016X} {instruction}; {instruction.code=}")
+        callback(
+            f"{instruction.ip:016X} {instruction}; {instruction.code=} | ({instruction.op_code()})"
+        )
 
 
 def _add_instruction_label(label_id: int, instruction: Instruction) -> Instruction:
@@ -85,27 +79,50 @@ class Hook:
         self.deactivate()
 
     def pre_hook(self):
+        """Called before the hook is activated"""
         pass
 
     def post_hook(self):
+        """Called after the hook is activated"""
         pass
 
     def hook(self) -> Any:
+        """Called when the hook is activated"""
         raise NotImplementedError()
 
     def unhook(self):
+        """Called when the hook is deactivated"""
         pass
 
     @property
     def active(self) -> bool:
+        """Whether the hook is active"""
         return self._active
 
     def get_code(
         self,
     ) -> list[Instruction]:
+        """Called when the hook is activated to get the code to put in the hook"""
         raise NotImplementedError()
 
     def allocate_variable(self, name: str, size: int) -> Allocation:
+        """
+        Allocate a variable of the specified size for use in the hook, retrievable with get_variable.
+
+        Args:
+            name: str
+                The name of the variable to allocate.
+            size: int
+                The size of the memory block to allocate.
+
+        Returns:
+            Allocation
+                An Allocation object representing the allocated memory block.
+
+        Raises:
+            ValueError
+                If a variable with the specified name has already been allocated.
+        """
         if self._variables.get("name") is not None:
             raise ValueError(f"Variable {name} is already allocated")
 
@@ -114,12 +131,33 @@ class Hook:
         return allocation
 
     def get_variable(self, name: str) -> Allocation:
+        """
+        Retrieves the allocated variable by its name.
+
+        This method attempts to fetch the variable associated with the provided
+        name from the internal allocation storage. If the requested variable
+        does not exist, an error is raised to indicate that it has not been
+        allocated.
+
+        Args:
+            name (str): The name of the variable to retrieve.
+
+        Returns:
+        Allocation
+            The allocated variable corresponding to the given name.
+
+        Raises:
+        ValueError
+            If the variable with the specified name does not exist in the
+            allocation storage.
+        """
         try:
             return self._variables[name]
         except KeyError:
             raise ValueError(f"Variable {name} has not been allocated")
 
     def activate(self) -> dict[str, Allocation]:
+        """Activate the hook"""
         if self.active:
             raise ValueError(f"Cannot activate active hook {self.__class__.__name__}")
 
@@ -134,6 +172,7 @@ class Hook:
         return self._variables
 
     def deactivate(self, *, close_allocator: bool = True):
+        """Deactivate the hook"""
         self.unhook()
 
         if close_allocator:
@@ -144,17 +183,34 @@ class Hook:
 
 
 class JmpHook(Hook):
-    PATTERN: regex.Pattern | bytes | None = None
+    PATTERN: regex.Pattern[bytes] | bytes | None = None
     MODULE: str | None = None
     PRESERVE_RAX: bool = True
 
-    def __init__(self, process: "Process"):
+    def __init__(
+        self,
+        process: "Process",
+        *,
+        special_deallocate: bool = True,
+        delayed_close_allocator_seconds: float | None = 0.5,
+    ):
+        """
+        Initializes an instance of the specified class with provided parameters.
+
+        Args:
+            process (Process): The process to hook.
+            special_deallocate (bool): If we should remove the entry jump before deallocating. Default is True.
+            delayed_close_allocator_seconds (float | None): How many seconds to delay the deallocating. Default is 0.5.
+        """
         if not process.process_64_bit:
             self.PRESERVE_RAX = False
 
         super().__init__(process)
         # (address, code)
         self._original_code: tuple[int, bytes] | None = None
+
+        self.close_allocator = special_deallocate
+        self.delayed_close_allocator_seconds = delayed_close_allocator_seconds
 
     def activate(self) -> dict[str, Allocation]:
         if self.PATTERN is None:
@@ -168,30 +224,27 @@ class JmpHook(Hook):
         return super().activate()
 
     # TODO: move the delayed dealloc stuff to Hook class?
-    def deactivate(
-        self,
-        *,
-        close_allocator: bool = True,
-        delayed_close_allocator_seconds: float | None = None,
-    ):
-        """Deactivates the hook
-
-        Args:
-            close_allocator (bool, optional): If the body allocator should be closed. Defaults to True.
-            delayed_close_allocator_seconds (float | None, optional): how many second to delay body deallocation. Defaults to None.
-        """
-        if close_allocator is False and delayed_close_allocator_seconds is not None:
+    def deactivate(self, close_allocator: bool = True):
+        """Deactivates the hook"""
+        if (
+            self.close_allocator is False
+            and self.delayed_close_allocator_seconds is not None
+        ):
             raise ValueError(
                 "close_allocator cannot be False with a delayed number of seconds"
             )
 
-        if close_allocator is True and delayed_close_allocator_seconds is not None:
+        if (
+            self.close_allocator is True
+            and self.delayed_close_allocator_seconds is not None
+        ):
             # this will write over the outside jmp so the body is no longer entered
             super().deactivate(close_allocator=False)
             # this wait gives the process time to exit the hook body code, should only need ~1 second
-            time.sleep(delayed_close_allocator_seconds)
+            time.sleep(self.delayed_close_allocator_seconds)
             # finally deallocate the body
             self.allocator.close()
+            return None
         else:
             return super().deactivate(close_allocator=close_allocator)
 
@@ -449,7 +502,7 @@ class RegisterCaptureSettings:
 
 # NOTE: this registertype is kinda mid, we may need to provide our own
 def create_capture_hook(
-    pattern: regex.Pattern | bytes,
+    pattern: regex.Pattern[bytes] | bytes,
     module: str,
     bitness: Literal[32] | Literal[64],
     *,
@@ -458,7 +511,7 @@ def create_capture_hook(
     """Create a capture hook class
 
     Args:
-        pattern (regex.Pattern | bytes): Pattern to hook at
+        pattern (regex.Pattern[bytes] | bytes): Pattern to hook at
         module (str): Module to search in
         bitness (int): What bitness of hook to create
         register_captures (list[RegisterCaptureSettings]): Registers to capture
@@ -474,7 +527,7 @@ def create_capture_hook(
 
 
 def _create_capture_hook_32bit(
-    pattern: regex.Pattern | bytes,
+    pattern: regex.Pattern[bytes] | bytes,
     module: str,
     register_captures: list[RegisterCaptureSettings],
 ):
@@ -531,7 +584,7 @@ def _create_capture_hook_32bit(
 
 
 def _create_capture_hook_64bit(
-    pattern: regex.Pattern | bytes,
+    pattern: regex.Pattern[bytes] | bytes,
     module: str,
     register_captures: list[RegisterCaptureSettings],
 ):

@@ -2,16 +2,14 @@ import ctypes
 import functools
 import platform
 import struct
-import typing
 from pathlib import Path
-from typing import Any, Self, Literal, TypeAlias, assert_never
+from typing import Any, Self, assert_never
 
 import regex
 
 from memobj.utils import ProcessEndianness, Type
 
 
-# TODO: add non-keyword to args where needed (/)
 class Process:
     """A connected process"""
 
@@ -139,13 +137,13 @@ class Process:
         raise NotImplementedError()
 
     def scan_memory(
-        self, pattern: regex.Pattern | bytes, *, module: str | None = None
+        self, pattern: regex.Pattern[bytes] | bytes, *, module: str | None = None
     ) -> list[int]:
         """
         Scan memory for a regex pattern
 
         Args:
-            pattern: A regex.Pattern or a byte pattern
+            pattern: A regex.Pattern[bytes] or a byte pattern
             module: Name of a module to exclusively search
 
         Returns:
@@ -154,13 +152,13 @@ class Process:
         raise NotImplementedError()
 
     def scan_one(
-        self, pattern: regex.Pattern | bytes, *, module: str | None = None
+        self, pattern: regex.Pattern[bytes] | bytes, *, module: str | None = None
     ) -> int:
         """
         Scan memory for a regex pattern and error if one address was not found
 
         Args:
-            pattern: A regex.Pattern or a byte pattern
+            pattern: A regex.Pattern[bytes] or a byte pattern
             module: Name of a module to exclusively search
 
         Returns:
@@ -225,7 +223,7 @@ class Process:
             case _:
                 assert_never(endianness)
 
-        combined_format = endianness_string + read_type.value
+        combined_format = endianness_string + read_type.value  # type: ignore (it doesn't believe me about exhaustiveness)
 
         return self.read_formatted(address, combined_format)
 
