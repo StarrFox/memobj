@@ -10,36 +10,18 @@ test:
     uv run pytest
 
 # does a version bump commit
-[linux]
 bump-commit type="minor": && create-tag
     uv version --bump {{type}}
-    git commit -am "$(uv version | awk '{print $2}' | xargs echo "bump to")"
-    uv version | awk '{print $2}' | xargs git tag
-    git push
-    git push --tags
-
-# does a version bump commit
-[windows]
-bump-commit type="minor": && create-tag
-    uv version --bump {{type}}
-    git commit -am ("bump to " + (uv version | Select-String -Pattern '\d+\.\d+\.\d+' | ForEach-Object { $_.Matches.Value }))
+    git commit -am ("bump to " + (uv version --short))
     git fetch --tags
-    git tag (uv version | Select-String -Pattern '\S+' | ForEach-Object { $_.Line.Split(' ')[1] })
+    git tag (uv version --short)
     git push
     git push --tags
 
 # creates a new tag for the current version
-[linux]
 create-tag:
     git fetch --tags
-    uv version | awk '{print $2}' | xargs git tag
-    git push --tags
-
-# creates a new tag for the current version
-[windows]
-create-tag:
-    git fetch --tags
-    git tag (uv version | Select-String -Pattern '\S+' | ForEach-Object { $_.Line.Split(' ')[1] })
+    git tag (uv version --short)
     git push --tags
 
 
