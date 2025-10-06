@@ -422,7 +422,7 @@ class JmpHook(Hook):
 
     def get_jump_code(self, hook_address: int, noops_needed: int) -> list[Instruction]:
         if self.PRESERVE_RAX:
-            if self.process.process_64_bit:
+            if not self.process.process_64_bit:
                 raise RuntimeError(
                     "somehow in preserve rax code for non-64 bit process hook"
                 )
