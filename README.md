@@ -43,8 +43,9 @@ This project uses uv as the build backend and package manager.
   - isort . && black .
 
 Optional: A Nix flake provides a dev shell with Python 3.11, just, black, isort, and more:
+
 - nix develop
 
 ## Support
 
-discord: https://discord.gg/wcftyYm6qe
+discord: <https://discord.gg/wcftyYm6qe>
