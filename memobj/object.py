@@ -42,10 +42,9 @@ class MemoryObjectMeta(type):
 
 
 class MemoryObject(metaclass=MemoryObjectMeta):
-    __memory_object_instances__ = {}
+    __memory_object_instances__: dict[str, type["MemoryObject"]] = {}
 
-    __memory_objects__ = {}
-    __memory_properties__ = {}
+    __memory_properties__: dict[str, MemoryProperty] = {}
 
     def __init__(
         self,

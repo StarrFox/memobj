@@ -20,7 +20,10 @@ Issues = "https://github.com/StarrFox/memobj/issues"
 
 [dependency-groups]
 tests = [
+    "mypy>=1.18.2",
     "pytest>=8.4.2",
+    "pytest-cov>=7.0.0",
+    "types-regex>=2025.9.18.20250921",
 ]
 
 
