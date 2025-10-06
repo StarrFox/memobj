@@ -2,7 +2,8 @@ import time
 from dataclasses import dataclass
 from functools import cached_property
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Callable, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self, ClassVar
+from collections.abc import Callable
 
 import regex
 from iced_x86 import (BlockEncoder, Code, Decoder, FlowControl, Instruction,
@@ -39,9 +40,9 @@ def _debug_print_disassembly(
         )
 
 
-def _add_instruction_label(label_id: int, instruction: Instruction) -> Instruction:
-    instruction.ip = label_id
-    return instruction
+# def _add_instruction_label(label_id: int, instruction: Instruction) -> Instruction:
+#     instruction.ip = label_id
+#     return instruction
 
 
 def instructions_to_code(
@@ -183,9 +184,9 @@ class Hook:
 
 
 class JmpHook(Hook):
-    PATTERN: regex.Pattern[bytes] | bytes | None = None
-    MODULE: str | None = None
-    PRESERVE_RAX: bool = True
+    PATTERN: ClassVar[regex.Pattern[bytes] | bytes | None] = None
+    MODULE: ClassVar[str | None] = None
+    PRESERVE_RAX: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -202,8 +203,9 @@ class JmpHook(Hook):
             special_deallocate (bool): If we should remove the entry jump before deallocating. Default is True.
             delayed_close_allocator_seconds (float | None): How many seconds to delay the deallocating. Default is 0.5.
         """
+        # TODO: make this better
         if not process.process_64_bit:
-            self.PRESERVE_RAX = False
+            self.__class__.PRESERVE_RAX = False
 
         super().__init__(process)
         # (address, code)
@@ -224,7 +226,7 @@ class JmpHook(Hook):
         return super().activate()
 
     # TODO: move the delayed dealloc stuff to Hook class?
-    def deactivate(self, close_allocator: bool = True):
+    def deactivate(self, *, close_allocator: bool = True):
         """Deactivates the hook"""
         if (
             self.close_allocator is False
@@ -323,8 +325,6 @@ class JmpHook(Hook):
 
         # TODO: what does this 10 mean? is it just a general guess and what else we might need?
         search_bytes = self.process.read_memory(jump_address, self._jump_needed + 10)
-
-        # logger.debug(f"{search_bytes=}")
 
         if self.process.process_64_bit:
             bitness = 64

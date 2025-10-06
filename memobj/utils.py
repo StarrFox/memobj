@@ -9,12 +9,12 @@ T = TypeVar("T")
 
 
 class ValueWaiter(Generic[T]):
-    def __init__(self, callback: Callable[[], T]):
-        """A utility class to wait for changes from a callable
+    """A utility class to wait for changes from a callable
 
-        Args:
-            callback (Callable[[], T]): the callable to wait for changes from
-        """
+    Args:
+        callback (Callable[[], T]): the callable to wait for changes from
+    """
+    def __init__(self, callback: Callable[[], T]):
         self.callback = callback
 
     def wait_for_value(

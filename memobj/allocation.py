@@ -42,13 +42,13 @@ class Allocation:
 
         return self.process.read_typed(self.address, read_type)
 
-    def write_typed(self, write_type: Type) -> None:
+    def write_typed(self, write_type: Type, value: Any) -> None:
         if (type_size := get_type_size(write_type)) != self.size:
             raise ValueError(
                 f"Write type ({type_size}) does not match allocation size ({self.size})"
             )
 
-        return self.process.write_typed(self.address, write_type)
+        return self.process.write_typed(self.address, write_type, value)
 
 
 class Allocator:
