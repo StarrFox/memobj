@@ -7,7 +7,7 @@ default:
 
 # run tests
 test:
-    uv run pytest
+    uv run pytest --cov=memobj
 
 # does a version bump commit
 bump-commit type="minor": && create-tag

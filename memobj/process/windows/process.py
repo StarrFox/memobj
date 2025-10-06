@@ -229,7 +229,7 @@ class WindowsProcess(Process):
                 )
 
             else:
-                preferred_start = 0  # type: ignore (null pointer)
+                preferred_start = ctypes.c_void_p(0)
 
             ctypes.windll.kernel32.VirtualAllocEx.restype = ctypes.c_size_t
 
