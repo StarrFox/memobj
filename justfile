@@ -7,16 +7,13 @@ default:
 
 # run tests
 test:
-    uv run pytest --cov=memobj
+    uv run pytest
 
 # does a version bump commit
 bump-commit type="minor": && create-tag
     uv version --bump {{type}}
     git commit -am ("bump to " + (uv version --short))
-    git fetch --tags
-    git tag (uv version --short)
     git push
-    git push --tags
 
 # creates a new tag for the current version
 create-tag:
