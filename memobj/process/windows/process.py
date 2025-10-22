@@ -552,7 +552,6 @@ class WindowsProcess(Process):
         Returns:
             WindowsModule: The injected module
         """
-
         if isinstance(path, str):
             path = Path(path)
 
@@ -571,4 +570,5 @@ class WindowsProcess(Process):
                 thread_wait_time=-1,
             )
 
-        return WindowsModule.from_name(self, path.name)
+            # thread_wait_time -1 should wait for the library to be loaded
+            return WindowsModule.from_name(self, path.name)
