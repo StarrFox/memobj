@@ -27,23 +27,23 @@ class SharedPointer(ctypes.Structure):
 
 
 def create_shared_pointer(data: int = 0):
-    obj = ExampleObject(data = data)
+    obj = ExampleObject(data=data)
     obj_p = ctypes.pointer(obj)
-    
-    ref = ReferenceObject(obj = obj_p)
-    shared = SharedPointer(obj = obj_p, reference = ctypes.pointer(ref))
+
+    ref = ReferenceObject(obj=obj_p)
+    shared = SharedPointer(obj=obj_p, reference=ctypes.pointer(ref))
 
     return shared
 
 
 def test_read_shared_pointer(process):
-    class MemExampleObject(MemoryObject, replace = True):
+    class MemExampleObject(MemoryObject, replace=True):
         data = Unsigned4(0x0)
 
-    class MemReferenceObject(MemoryObject, replace = True):
+    class MemReferenceObject(MemoryObject, replace=True):
         object = Pointer(16, MemExampleObject)
-    
-    class MemSharedPointer(MemoryObject, replace = True):
+
+    class MemSharedPointer(MemoryObject, replace=True):
         reference = Pointer(8, MemReferenceObject)
 
     shared = create_shared_pointer(200)
@@ -54,10 +54,10 @@ def test_read_shared_pointer(process):
 
 
 def test_read_double_pointer(process):
-    class MemExampleObject(MemoryObject, replace = True):
+    class MemExampleObject(MemoryObject, replace=True):
         data = Unsigned4(0x0)
 
-    class MemSharedPointer(MemoryObject, replace = True):
+    class MemSharedPointer(MemoryObject, replace=True):
         reference: Pointer = Pointer(8, Pointer(16, MemExampleObject))
 
     shared = create_shared_pointer(200)
@@ -69,4 +69,3 @@ def test_read_double_pointer(process):
     x.from_memory_deref()
 
     assert mem_obj.reference.from_memory_deref().from_memory_deref().data == 200
-

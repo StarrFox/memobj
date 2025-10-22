@@ -7,7 +7,9 @@ from . import MemoryProperty
 class SimpleData(MemoryProperty):
     format_string: Union[str, None] = None
 
-    def __init__(self, offset: int | None = None, format_string: Union[str, None] = None):
+    def __init__(
+        self, offset: int | None = None, format_string: Union[str, None] = None
+    ):
         super().__init__(offset)
         if format_string is not None:
             self.format_string = format_string
@@ -15,7 +17,7 @@ class SimpleData(MemoryProperty):
     def _get_format(self) -> str:
         if self.format_string is None:
             raise ValueError(f"None format_string for {self.__class__.__name__}")
-        
+
         return self.format_string
 
     def from_memory(self) -> Any:

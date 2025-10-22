@@ -8,19 +8,16 @@ from typing import Self, Union
 import regex
 
 from memobj.allocation import Allocator
-from memobj.process.windows.module import WindowsModule
-from memobj.process.windows.utils import (
-    CheckWindowsOsError,
-    WindowsModuleInfo,
-    WindowsMemoryProtection,  # TODO: what was this going to be used for?
-    WindowsMemoryBasicInformation,
-    LUID,
-    LUID_AND_ATTRIBUTES,
-    SingleLUIDAndAttributes,
-    TOKEN_PRIVILEGES,
-    PROCESSENTRY32
-)
 from memobj.process import Process
+from memobj.process.windows.module import WindowsModule
+from memobj.process.windows.utils import \
+    WindowsMemoryProtection  # TODO: what was this going to be used for?
+from memobj.process.windows.utils import (LUID, LUID_AND_ATTRIBUTES,
+                                          PROCESSENTRY32, TOKEN_PRIVILEGES,
+                                          CheckWindowsOsError,
+                                          SingleLUIDAndAttributes,
+                                          WindowsMemoryBasicInformation,
+                                          WindowsModuleInfo)
 
 
 # TODO: update everything that uses modules to use the new WindowsModule
@@ -34,7 +31,9 @@ class WindowsProcess(Process):
         with CheckWindowsOsError():
             # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getcurrentprocess
             proc = ctypes.windll.kernel32.GetCurrentProcess()
-            token_access_flags = 0x1 | 0x2 | 0x4 | 0x8 | 0x10 | 0x20 | 0x40 | 0x80 | 0xF0000
+            token_access_flags = (
+                0x1 | 0x2 | 0x4 | 0x8 | 0x10 | 0x20 | 0x40 | 0x80 | 0xF0000
+            )
             token_handle = ctypes.wintypes.HANDLE()
             # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocesstoken
             # for some reason OpenProcessToken doesn't work if it's argtypes aren't defined
@@ -93,7 +92,7 @@ class WindowsProcess(Process):
         maybe_process_id = ctypes.windll.kernel32.GetProcessId(self.process_handle)
         if maybe_process_id == 0:
             raise ValueError("GetProcessId failed")
-        
+
         return maybe_process_id
 
     @functools.cached_property
@@ -132,7 +131,9 @@ class WindowsProcess(Process):
         return Path(file_name.value)
 
     @classmethod
-    def from_name(cls, name: str, *, require_debug: bool = True, ignore_case: bool = True) -> Self:
+    def from_name(
+        cls, name: str, *, require_debug: bool = True, ignore_case: bool = True
+    ) -> Self:
         with CheckWindowsOsError():
             # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot
             snapshot = ctypes.windll.kernel32.CreateToolhelp32Snapshot(
@@ -154,8 +155,7 @@ class WindowsProcess(Process):
             # see PROCESSENTRY32.dwSize note for why this has to be set
             process_entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
             process_32_success = ctypes.windll.kernel32.Process32First(
-                snapshot,
-                ctypes.byref(process_entry)
+                snapshot, ctypes.byref(process_entry)
             )
 
             if process_32_success == 0:
@@ -171,13 +171,16 @@ class WindowsProcess(Process):
                 compare_name = process_entry.szExeFile.decode()
 
             if compare_name == name:
-                return cls.from_id(process_entry.th32ProcessID, require_debug=require_debug)
+                return cls.from_id(
+                    process_entry.th32ProcessID, require_debug=require_debug
+                )
             process_32_success = ctypes.windll.kernel32.Process32Next(
-                snapshot,
-                ctypes.byref(process_entry)
+                snapshot, ctypes.byref(process_entry)
             )
 
-        raise ValueError(f"No processes found named {name}; make sure you included the .exe and any capital letters")
+        raise ValueError(
+            f"No processes found named {name}; make sure you included the .exe and any capital letters"
+        )
 
     @classmethod
     def from_id(cls, pid: int, *, require_debug: bool = True) -> Self:
@@ -187,7 +190,9 @@ class WindowsProcess(Process):
             # 1300 is ERROR_NOT_ALL_ASSIGNED which is raised when the calling process doesn't have the
             # privilege on it's token
             if error.errno == 1300 and require_debug:
-                raise RuntimeError("Could not get debug permission; try running as admin or pass require_debug=False")
+                raise RuntimeError(
+                    "Could not get debug permission; try running as admin or pass require_debug=False"
+                )
 
         # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess
         # https://learn.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights
@@ -206,7 +211,7 @@ class WindowsProcess(Process):
     def create_allocator(self) -> Allocator:
         return Allocator(self)
 
-    def allocate_memory(self, size: int, *, preferred_start: int | None = None) -> int: # type: ignore
+    def allocate_memory(self, size: int, *, preferred_start: int | None = None) -> int:  # type: ignore
         """
         Allocate <size> amount of memory in the process
 
@@ -219,10 +224,12 @@ class WindowsProcess(Process):
         """
         with CheckWindowsOsError():
             if preferred_start is not None:
-                preferred_start: ctypes.c_void_p = ctypes.cast(preferred_start, ctypes.c_void_p)
+                preferred_start: ctypes.c_void_p = ctypes.cast(
+                    preferred_start, ctypes.c_void_p
+                )
 
             else:
-                preferred_start = 0  # type: ignore (null pointer)
+                preferred_start = ctypes.c_void_p(0)
 
             ctypes.windll.kernel32.VirtualAllocEx.restype = ctypes.c_size_t
 
@@ -268,7 +275,9 @@ class WindowsProcess(Process):
             )
 
             if success == 0:
-                raise ValueError(f"ReadProcessMemory failed for address {hex(address)} with size {size}")
+                raise ValueError(
+                    f"ReadProcessMemory failed for address {hex(address)} with size {size}"
+                )
 
         return byte_buffer.raw
 
@@ -284,21 +293,23 @@ class WindowsProcess(Process):
             )
 
             if success == 0:
-                raise ValueError(f"WriteProcessMemory failed for address {hex(address)}")
+                raise ValueError(
+                    f"WriteProcessMemory failed for address {hex(address)}"
+                )
 
     def scan_memory(
-            self,
-            pattern: regex.Pattern | bytes,
-            *,
-            module: Union[str, WindowsModuleInfo, bool, None] = None,
+        self,
+        pattern: regex.Pattern[bytes] | bytes,
+        *,
+        module: Union[str, WindowsModuleInfo, bool, None] = None,
     ) -> list[int]:
         """
         Scan memory for a regex pattern
 
         Args:
-            pattern: A regex.Pattern or a byte pattern
+            pattern: A regex.Pattern[bytes] or a byte pattern
             module: Name of a module to exclusively search or a module to search for
-            (True is shortcut for base module)
+            (True is a shortcut for base module)
 
         Returns:
         A list of addresses that matched
@@ -338,7 +349,9 @@ class WindowsProcess(Process):
 
             # TODO: is this actually faster than checking if the pages can be read
             try:
-                region_data = self.read_memory(region_info.BaseAddress, region_info.RegionSize)
+                region_data = self.read_memory(
+                    region_info.BaseAddress, region_info.RegionSize
+                )
             except OSError:
                 continue
 
@@ -381,14 +394,18 @@ class WindowsProcess(Process):
         return memory_basic_information
 
     @typing.overload
-    def get_modules(self, base_only: typing.Literal[False] = False) -> list[WindowsModuleInfo]: ...
+    def get_modules(
+        self, base_only: typing.Literal[False] = False
+    ) -> list[WindowsModuleInfo]: ...
 
     @typing.overload
     def get_modules(self, base_only: typing.Literal[True]) -> WindowsModuleInfo: ...
 
     # TODO: check if you actually can't get modules on linux
     # note: platform dependent
-    def get_modules(self, base_only: bool = False) -> list[WindowsModuleInfo] | WindowsModuleInfo:
+    def get_modules(
+        self, base_only: bool = False
+    ) -> list[WindowsModuleInfo] | WindowsModuleInfo:
         # TODO: for some reason EnumProcessModulesEx always sets LastError?
         # with CheckWindowsOsError():
         # TODO: is it always the psapi dll? check requirments section
@@ -408,7 +425,7 @@ class WindowsProcess(Process):
 
         # with CheckWindowsOsError():
         module_handles_type = ctypes.wintypes.HMODULE * (
-                lpcb_needed.value // ctypes.sizeof(ctypes.wintypes.HMODULE)
+            lpcb_needed.value // ctypes.sizeof(ctypes.wintypes.HMODULE)
         )
         module_handles = module_handles_type()
 
@@ -437,7 +454,9 @@ class WindowsProcess(Process):
                 )
 
                 if success == 0:
-                    raise ValueError(f"GetModuleInformation failed for handle {module_handle}")
+                    raise ValueError(
+                        f"GetModuleInformation failed for handle {module_handle}"
+                    )
 
                 if base_only:
                     return module_info
@@ -472,7 +491,13 @@ class WindowsProcess(Process):
         raise ValueError(f"No modules named {name}")
 
     # note: platform dependent
-    def create_remote_thread(self, address: int, *, param_pointer: ctypes.c_void_p | None = None, thread_wait_time: int = 0) -> int:
+    def create_remote_thread(
+        self,
+        address: int,
+        *,
+        param_pointer: ctypes.c_void_p | None = None,
+        thread_wait_time: int = 0,
+    ) -> int:
         """Create a remote thread in the process
 
         Args:
@@ -490,27 +515,30 @@ class WindowsProcess(Process):
         with CheckWindowsOsError():
             # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread
             thread_handle = ctypes.windll.kernel32.CreateRemoteThread(
-                self.process_handle, # hProcess
-                0, # lpThreadAttributes
-                0, # dwStackSize
-                ctypes.c_void_p(address), # lpStartAddress
-                param_pointer if param_pointer is not None else 0, # lpParameter
-                0, # dwCreationFlags
-                0 # lpThreadId
+                self.process_handle,  # hProcess
+                0,  # lpThreadAttributes
+                0,  # dwStackSize
+                ctypes.c_void_p(address),  # lpStartAddress
+                param_pointer if param_pointer is not None else 0,  # lpParameter
+                0,  # dwCreationFlags
+                0,  # lpThreadId
             )
 
             if thread_handle == 0:
-                raise ValueError(f"CreateRemoteThread failed for address {hex(address)}")
+                raise ValueError(
+                    f"CreateRemoteThread failed for address {hex(address)}"
+                )
 
         with CheckWindowsOsError():
             # https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject
             thread_status = ctypes.windll.kernel32.WaitForSingleObject(
-                thread_handle,
-                thread_wait_time
+                thread_handle, thread_wait_time
             )
 
             if thread_wait_time != 0 and thread_status != 0:
-                raise TimeoutError(f"Waiting for injected dll thread to finish failed: {thread_status}")
+                raise TimeoutError(
+                    f"Waiting for injected dll thread to finish failed: {thread_status}"
+                )
 
         return thread_handle
 
@@ -524,19 +552,23 @@ class WindowsProcess(Process):
         Returns:
             WindowsModule: The injected module
         """
-
         if isinstance(path, str):
-            path = Path(path)    
+            path = Path(path)
 
         encoded_path = str(path.absolute()).encode("utf-16le")
 
         with self.create_allocator() as allocator:
             path_allocation = allocator.allocate(len(encoded_path))
             self.write_memory(path_allocation.address, encoded_path)
-            
+
             kernel32 = WindowsModule.from_name(self, "kernel32.dll")
             LoadLibraryW = kernel32.get_symbol_with_name("LoadLibraryW")
             # https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryw
-            self.create_remote_thread(LoadLibraryW, param_pointer=ctypes.c_void_p(path_allocation.address), thread_wait_time=-1)
+            self.create_remote_thread(
+                LoadLibraryW,
+                param_pointer=ctypes.c_void_p(path_allocation.address),
+                thread_wait_time=-1,
+            )
 
-        return WindowsModule.from_name(self, path.name)
+            # thread_wait_time -1 should wait for the library to be loaded
+            return WindowsModule.from_name(self, path.name)

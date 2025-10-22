@@ -3,7 +3,6 @@ import ctypes.wintypes
 import enum
 
 
-
 class CheckWindowsOsError:
     def __enter__(self):
         # https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-setlasterror
@@ -60,6 +59,7 @@ class WindowsModuleInfo(ctypes.Structure):
 # https://github.com/Cr4sh/fwexpl/blob/16f340d666b25899eda61f7b3ebf3d518eec01b0/src/common/TlHelp32.h#L24C9-L24C30
 MAX_MODULE_NAME32: int = 255
 
+
 # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-moduleentry32
 class ModuleEntry32(ctypes.Structure):
     _fields_ = [
@@ -74,6 +74,7 @@ class ModuleEntry32(ctypes.Structure):
         ("szModule", ctypes.c_char * (MAX_MODULE_NAME32 + 1)),
         ("szExePath", ctypes.c_char * ctypes.wintypes.MAX_PATH),
     ]
+
 
 # https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants
 class WindowsMemoryProtection(enum.IntFlag):
@@ -109,6 +110,7 @@ class LUID(ctypes.Structure):
         ("HighPart", ctypes.c_long),
     ]
 
+
 # https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-luid_and_attributes
 class LUID_AND_ATTRIBUTES(ctypes.Structure):
     _fields_ = [
@@ -124,7 +126,10 @@ SingleLUIDAndAttributes = LUID_AND_ATTRIBUTES * 1
 class TOKEN_PRIVILEGES(ctypes.Structure):
     _fields_ = [
         ("PrivilegeCount", ctypes.wintypes.DWORD),
-        ("Privileges", SingleLUIDAndAttributes),  # we are only ever specifying one privilege
+        (
+            "Privileges",
+            SingleLUIDAndAttributes,
+        ),  # we are only ever specifying one privilege
     ]
 
 
@@ -140,5 +145,5 @@ class PROCESSENTRY32(ctypes.Structure):
         ("th32ParentProcessID", ctypes.wintypes.DWORD),
         ("pcPriClassBase", ctypes.c_long),
         ("dwFlags", ctypes.wintypes.DWORD),
-        ("szExeFile", ctypes.c_char * ctypes.wintypes.MAX_PATH)
+        ("szExeFile", ctypes.c_char * ctypes.wintypes.MAX_PATH),
     ]

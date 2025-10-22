@@ -1,4 +1,4 @@
 from .base import MemoryProperty
-from .pointer import Pointer, Void, DereffedPointer
+from .pointer import DereffedPointer, Pointer, Void
 from .simple import *
 from .string import NullTerminatedString

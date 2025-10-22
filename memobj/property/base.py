@@ -1,5 +1,4 @@
-from typing import TYPE_CHECKING, Optional, Any, Union
-
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
     from memobj.object import MemoryObject
@@ -22,7 +21,7 @@ class MemoryProperty(property):
     def offset_address(self) -> int:
         if self.offset is None:
             raise ValueError("Offset cannot be None")
-        
+
         assert self.memory_object is not None
         return self.memory_object.base_address + self.offset
 
