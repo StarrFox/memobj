@@ -138,3 +138,6 @@ result
 
 scratchpad.py
 injection_dll.dll
+
+# ruff
+.ruff_cache
