@@ -26,6 +26,8 @@ tests = [
     "types-regex>=2025.9.18.20250921",
 ]
 
+[tool.uv]
+default-groups = "all"
 
 [tool.uv.build-backend]
 module-root = ""

@@ -1,21 +1,20 @@
-import time
-import struct
 import operator
+import struct
+import time
 from enum import Enum
 from typing import Callable, Generic, TypeVar
-
 
 # TODO: remove when dropping 3.11 support
 T = TypeVar("T")
 
 
 class ValueWaiter(Generic[T]):
-    def __init__(self, callback: Callable[[], T]):
-        """A utility class to wait for changes from a callable
+    """A utility class to wait for changes from a callable
 
-        Args:
-            callback (Callable[[], T]): the callable to wait for changes from
-        """
+    Args:
+        callback (Callable[[], T]): the callable to wait for changes from
+    """
+    def __init__(self, callback: Callable[[], T]):
         self.callback = callback
 
     def wait_for_value(
@@ -96,33 +95,36 @@ class ValueWaiter(Generic[T]):
             results += 1
 
 
-class ProcessEndianess(Enum):
+class ProcessEndianness(Enum):
     native = 0
     little = 1
     big = 2
 
 
-# TODO: rework read_formated_single to use this
-class TypeFormat(Enum):
+class Type(Enum):
     """
     Byte sized based types
     """
 
     # struct calls this char but they're trolling
     byte = "c"
-    s1 = "b"
-    u1 = "B"
     bool = "?"
-    s2 = "h"
-    u2 = "H"
-    s4 = "i"
-    u4 = "I"
-    s8 = "l"
-    u8 = "L"
-    ssize = "n"
-    usize = "N"
+    signed1 = "b"
+    unsigned1 = "B"
+    signed2 = "h"
+    unsigned2 = "H"
+    signed4 = "i"
+    unsigned4 = "I"
+    signed8 = "l"
+    unsigned8 = "L"
+    signed_size = "n"
+    unsigned_size = "N"
     float = "f"
     double = "d"
+
+
+def get_type_size(type_: Type) -> int:
+    return struct.calcsize(type_.value)
 
 
 def align_up(value: int, align: int) -> int:

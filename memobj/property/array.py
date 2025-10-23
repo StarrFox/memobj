@@ -1,7 +1,7 @@
 from typing import Any
 
-from . import MemoryProperty
 from .. import MemoryObject
+from . import MemoryProperty
 
 
 class Array(MemoryProperty):

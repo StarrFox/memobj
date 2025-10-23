@@ -137,9 +137,7 @@ class Pointer(MemoryProperty):
             instance = self._pointed_type(address=addr, process=self.process)
 
             for attribute_name in self._pointed_type.__memory_properties__.keys():
-                setattr(
-                    instance, attribute_name, getattr(value, attribute_name)
-                )
+                setattr(instance, attribute_name, getattr(value, attribute_name))
 
         elif isinstance(self._pointed_type, str):
             # noinspection PyProtectedMember

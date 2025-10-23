@@ -2,25 +2,14 @@ import ctypes
 import functools
 import platform
 import struct
-import typing
 from pathlib import Path
-from typing import Any, Self, Literal, TypeAlias, Iterator
+from typing import Any, Self, assert_never
 
 import regex
 
-from memobj.utils import ProcessEndianess, TypeFormat
+from memobj.utils import ProcessEndianness, Type
 
 
-# TODO: switch to type statements when we drop 3.11 (TypeAlias is depreciated)
-FormatStringInt: TypeAlias = Literal[
-    "b", "B", "h", "H", "i", "I", "l", "L", "q", "Q", "n", "N", "P"
-]
-FormatStringFloat: TypeAlias = Literal["e", "f", "d"]
-FormatStringBool: TypeAlias = Literal["?"]
-FormatStringBytes: TypeAlias = Literal["c", "s", "p"]
-
-
-# TODO: add non-keyword to args where needed (/)
 class Process:
     """A connected process"""
 
@@ -148,13 +137,13 @@ class Process:
         raise NotImplementedError()
 
     def scan_memory(
-        self, pattern: regex.Pattern | bytes, *, module: str | None = None
+        self, pattern: regex.Pattern[bytes] | bytes, *, module: str | None = None
     ) -> list[int]:
         """
         Scan memory for a regex pattern
 
         Args:
-            pattern: A regex.Pattern or a byte pattern
+            pattern: A regex.Pattern[bytes] or a byte pattern
             module: Name of a module to exclusively search
 
         Returns:
@@ -163,13 +152,13 @@ class Process:
         raise NotImplementedError()
 
     def scan_one(
-        self, pattern: regex.Pattern | bytes, *, module: str | None = None
+        self, pattern: regex.Pattern[bytes] | bytes, *, module: str | None = None
     ) -> int:
         """
         Scan memory for a regex pattern and error if one address was not found
 
         Args:
-            pattern: A regex.Pattern or a byte pattern
+            pattern: A regex.Pattern[bytes] or a byte pattern
             module: Name of a module to exclusively search
 
         Returns:
@@ -206,75 +195,35 @@ class Process:
 
         return formatted
 
-    @typing.overload
-    def read_formatted_single(
+    def read_typed(
         self,
         address: int,
-        format_string: FormatStringInt,
+        read_type: Type,
         *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
-    ) -> int: ...
-
-    @typing.overload
-    def read_formatted_single(
-        self,
-        address: int,
-        format_string: FormatStringBool,
-        *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
-    ) -> bool: ...
-
-    @typing.overload
-    def read_formatted_single(
-        self,
-        address: int,
-        format_string: FormatStringBytes,
-        *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
-    ) -> bytes: ...
-
-    @typing.overload
-    def read_formatted_single(
-        self,
-        address: int,
-        format_string: FormatStringFloat,
-        *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
-    ) -> float: ...
-
-    # NOTE: the order of these matters (the any default needs to be last)
-    @typing.overload
-    def read_formatted_single(
-        self,
-        address: int,
-        format_string: str,
-        *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
-    ) -> Any: ...
-
-    def read_formatted_single(
-        self,
-        address: int,
-        format_string: str,
-        *,
-        # TODO: should the default be native?
-        endianess: ProcessEndianess = ProcessEndianess.native,
+        endianness: ProcessEndianness = ProcessEndianness.native,
     ) -> Any:
-        if len(format_string) != 1:
-            raise ValueError(
-                f"format_string should be a single character not {format_string}"
-            )
+        """
+        Read a single typed value from memory using utils.Type and optional endianness
 
-        # we don't just include endianess in the format string to make typing easier
-        match endianess:
-            case ProcessEndianess.native:
-                endianess_string = "="
-            case ProcessEndianess.little:
-                endianess_string = "<"
-            case ProcessEndianess.big:
-                endianess_string = ">"
+        Args:
+            address: The address to read from
+            read_type: The Type enumeration indicating the value to read (e.g., Type.s4)
+            endianness: The endianness to use when reading (defaults to native "=")
 
-        combined_format = endianess_string + format_string
+        Returns:
+            The formatted value as the corresponding Python type
+        """
+        match endianness:
+            case ProcessEndianness.native:
+                endianness_string = "="
+            case ProcessEndianness.little:
+                endianness_string = "<"
+            case ProcessEndianness.big:
+                endianness_string = ">"
+            case _:
+                assert_never(endianness)
+
+        combined_format = endianness_string + read_type.value  # type: ignore (it doesn't believe me about exhaustiveness)
 
         return self.read_formatted(address, combined_format)
 
@@ -292,81 +241,25 @@ class Process:
         packed_data = struct.pack(format_string, value)
         self.write_memory(address, packed_data)
 
-    @typing.overload
-    def write_formatted_single(
+    def write_typed(
         self,
         address: int,
-        format_string: FormatStringInt,
-        value: int,
-        *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
-    ) -> None: ...
-
-    @typing.overload
-    def write_formatted_single(
-        self,
-        address: int,
-        format_string: FormatStringBool,
-        value: bool,
-        *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
-    ) -> None: ...
-
-    @typing.overload
-    def write_formatted_single(
-        self,
-        address: int,
-        format_string: FormatStringFloat,
-        value: float,
-        *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
-    ) -> None: ...
-
-    @typing.overload
-    def write_formatted_single(
-        self,
-        address: int,
-        format_string: FormatStringBytes,
-        value: bytes,
-        *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
-    ) -> None: ...
-
-    # TODO: this overrides the other impls into making value Any when we'd like it to error
-    #  i.e. write_formatted_single(1, "?", 100) would be valid when it shouldn't be
-    @typing.overload
-    def write_formatted_single(
-        self,
-        address: int,
-        format_string: str,
+        write_type: Type,
         value: Any,
         *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
-    ) -> None: ...
-
-    def write_formatted_single(
-        self,
-        address: int,
-        format_string: str,
-        value: Any,
-        *,
-        endianess: ProcessEndianess = ProcessEndianess.native,
+        endianness: ProcessEndianness = ProcessEndianness.native,
     ) -> None:
-        if len(format_string) != 1:
-            raise ValueError(
-                f"format_string should be a single character not {format_string}"
-            )
+        match endianness:
+            case ProcessEndianness.native:
+                endianness_string = "="
+            case ProcessEndianness.little:
+                endianness_string = "<"
+            case ProcessEndianness.big:
+                endianness_string = ">"
+            case _:
+                assert_never(endianness)
 
-        # we don't just include endianess in the format string to make typing easier
-        match endianess:
-            case ProcessEndianess.native:
-                endianess_string = "="
-            case ProcessEndianess.little:
-                endianess_string = "<"
-            case ProcessEndianess.big:
-                endianess_string = ">"
-
-        combined_format = endianess_string + format_string
+        combined_format = endianness_string + write_type.value
 
         return self.write_formatted(address, combined_format, value)
 

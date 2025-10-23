@@ -1,8 +1,6 @@
 def test_get_module_name(process):
     base_module = process.get_modules(True)
-    base_module_name = process.get_module_name(base_module)
-
-    assert base_module_name == "python.exe"
+    assert base_module.name == "python.exe"
 
 
 def test_get_module_named(process):

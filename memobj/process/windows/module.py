@@ -17,11 +17,11 @@ Module(...)
 """
 
 import ctypes
+from typing import TYPE_CHECKING, Iterator, Self
 
-from typing import Self, Iterator, TYPE_CHECKING
 from memobj.process import Module
 
-from .utils import ModuleEntry32, CheckWindowsOsError
+from .utils import CheckWindowsOsError, ModuleEntry32
 
 if TYPE_CHECKING:
     from .process import WindowsProcess
@@ -34,7 +34,7 @@ TH32CS_SNAPMODULE: int = 0x8
 class WindowsModule(Module):
     _symbols: dict[str, int] | None = None
 
-    # TODO: make a user facing iterface to this copying the object so it isnt changed while they're using it
+    # TODO: make a user facing iterface to this copying the object so it isn't changed while they're using it
     # TODO: get wide character variants working
     # adapted to python from https://learn.microsoft.com/en-us/windows/win32/toolhelp/traversing-the-module-list
     @staticmethod
@@ -103,6 +103,25 @@ class WindowsModule(Module):
                 )
 
         raise ValueError(f"No modules named {name}")
+
+    @classmethod
+    def get_all_modules(cls, process: "WindowsProcess") -> list[Self]:
+        modules: list[Self] = []
+
+        for module in cls._iter_modules(process):
+            module_name = module.szModule.decode()
+
+            modules.append(
+                cls(
+                    name=module_name,
+                    base_address=module.modBaseAddr,
+                    executable_path=module.szExePath.decode(),
+                    size=module.modBaseSize,
+                    process=process,
+                )
+            )
+        
+        return modules
 
     def get_symbol_with_name(self, name: str) -> int:
         try:

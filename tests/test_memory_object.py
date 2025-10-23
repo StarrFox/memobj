@@ -1,7 +1,7 @@
 import ctypes
 
-from memobj.property import *
 from memobj import MemoryObject
+from memobj.property import *
 
 
 # TODO: why do I use this instead of ctypes.addressof?

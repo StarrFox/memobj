@@ -31,6 +31,8 @@
             python
             just
             alejandra
+            rustc
+            cargo
             python.pkgs.black
             python.pkgs.isort
             python.pkgs.vulture
