@@ -32,7 +32,7 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: tests/manual/test_inject/target
-        key: ${{ runner.os }}-${{ hashFiles('tests/manual/src/**') }}
+        key: ${{ runner.os }}-${{ hashFiles('tests/manual/test_inject/src/**') }}
 
     - name: Setup rust
       if: steps.restore-cache-test.outputs.cache-hit != 'true'
@@ -45,7 +45,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: tests/manual/test_inject/target
-        key: ${{ runner.os }}-${{ hashFiles('tests/manual/src/**') }}
+        key: ${{ runner.os }}-${{ hashFiles('tests/manual/test_inject/src/**') }}
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
