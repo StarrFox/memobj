@@ -301,7 +301,7 @@ class WindowsProcess(Process):
         self,
         pattern: regex.Pattern[bytes] | bytes,
         *,
-        module: Union[str, WindowsModuleInfo, bool, None] = None,
+        module: str | WindowsModule | bool | None = None,
     ) -> list[int]:
         """
         Scan memory for a regex pattern
@@ -329,14 +329,14 @@ class WindowsProcess(Process):
             elif module is False:
                 raise ValueError("module can only be True")
 
-            elif isinstance(module, WindowsModuleInfo):
+            elif isinstance(module, WindowsModule):
                 pass
 
             else:
                 module = self.get_module_named(module)
 
-            region_start = module.lpBaseOfDll
-            max_size = region_start + module.SizeOfImage
+            region_start = module.base_address
+            max_size = region_start + module.size
 
         matches: list[int] = []
         while region_start < max_size:
@@ -396,99 +396,42 @@ class WindowsProcess(Process):
     @typing.overload
     def get_modules(
         self, base_only: typing.Literal[False] = False
-    ) -> list[WindowsModuleInfo]: ...
+    ) -> list[WindowsModule]: ...
 
     @typing.overload
-    def get_modules(self, base_only: typing.Literal[True]) -> WindowsModuleInfo: ...
+    def get_modules(self, base_only: typing.Literal[True]) -> WindowsModule: ...
 
     # TODO: check if you actually can't get modules on linux
     # note: platform dependent
     def get_modules(
         self, base_only: bool = False
-    ) -> list[WindowsModuleInfo] | WindowsModuleInfo:
-        # TODO: for some reason EnumProcessModulesEx always sets LastError?
-        # with CheckWindowsOsError():
-        # TODO: is it always the psapi dll? check requirments section
-        # https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-enumprocessmodulesex
-        lpcb_needed = ctypes.wintypes.DWORD()
+    ) -> list[WindowsModule] | WindowsModule:
+        if base_only:
+            return WindowsModule.from_name(self, self.executable_path.name)
+        else:
+            return WindowsModule.get_all_modules(self)
 
-        success = ctypes.windll.psapi.EnumProcessModulesEx(
-            self.process_handle,
-            0,
-            0,
-            ctypes.byref(lpcb_needed),
-            0x3,
-        )
+    # def get_module_name(self, module: WindowsModuleInfo) -> str:
+    #     with CheckWindowsOsError():
+    #         # https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmodulebasenamew
+    #         # I just assume MAX_PATH is good enough
+    #         name_buffer = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
 
-        if success == 0:
-            raise RuntimeError("EnumProcessModulesEx (get size) failed")
+    #         success = ctypes.windll.psapi.GetModuleBaseNameW(
+    #             self.process_handle,
+    #             ctypes.c_void_p(module.lpBaseOfDll),
+    #             ctypes.byref(name_buffer),
+    #             ctypes.wintypes.MAX_PATH,
+    #         )
 
-        # with CheckWindowsOsError():
-        module_handles_type = ctypes.wintypes.HMODULE * (
-            lpcb_needed.value // ctypes.sizeof(ctypes.wintypes.HMODULE)
-        )
-        module_handles = module_handles_type()
+    #         if success == 0:
+    #             raise ValueError(f"GetModuleBaseNameW failed for {module}")
 
-        success = ctypes.windll.psapi.EnumProcessModulesEx(
-            self.process_handle,
-            ctypes.byref(module_handles),
-            lpcb_needed,
-            ctypes.byref(ctypes.wintypes.DWORD()),
-            0x3,
-        )
+    #     return name_buffer.value
 
-        if success == 0:
-            raise RuntimeError("EnumProcessModulesEx failed")
-
-        with CheckWindowsOsError():
-            modules = []
-            for module_handle in module_handles:
-                # https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmoduleinformation
-                module_info = WindowsModuleInfo()
-
-                success = ctypes.windll.psapi.GetModuleInformation(
-                    self.process_handle,
-                    ctypes.wintypes.HMODULE(module_handle),
-                    ctypes.byref(module_info),
-                    ctypes.sizeof(module_info),
-                )
-
-                if success == 0:
-                    raise ValueError(
-                        f"GetModuleInformation failed for handle {module_handle}"
-                    )
-
-                if base_only:
-                    return module_info
-
-                modules.append(module_info)
-
-        return modules
-
-    def get_module_name(self, module: WindowsModuleInfo) -> str:
-        with CheckWindowsOsError():
-            # https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmodulebasenamew
-            # I just assume MAX_PATH is good enough
-            name_buffer = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
-
-            success = ctypes.windll.psapi.GetModuleBaseNameW(
-                self.process_handle,
-                ctypes.c_void_p(module.lpBaseOfDll),
-                ctypes.byref(name_buffer),
-                ctypes.wintypes.MAX_PATH,
-            )
-
-            if success == 0:
-                raise ValueError(f"GetModuleBaseNameW failed for {module}")
-
-        return name_buffer.value
-
-    def get_module_named(self, name: str) -> WindowsModuleInfo:
-        for module in self.get_modules():
-            if self.get_module_name(module) == name:
-                return module
-
-        raise ValueError(f"No modules named {name}")
+    # TODO: return module here
+    def get_module_named(self, name: str) -> WindowsModule:
+        return WindowsModule.from_name(self, name)
 
     # note: platform dependent
     def create_remote_thread(

@@ -104,6 +104,25 @@ class WindowsModule(Module):
 
         raise ValueError(f"No modules named {name}")
 
+    @classmethod
+    def get_all_modules(cls, process: "WindowsProcess") -> list[Self]:
+        modules: list[Self] = []
+
+        for module in cls._iter_modules(process):
+            module_name = module.szModule.decode()
+
+            modules.append(
+                cls(
+                    name=module_name,
+                    base_address=module.modBaseAddr,
+                    executable_path=module.szExePath.decode(),
+                    size=module.modBaseSize,
+                    process=process,
+                )
+            )
+        
+        return modules
+
     def get_symbol_with_name(self, name: str) -> int:
         try:
             return self.get_symbols()[name]
