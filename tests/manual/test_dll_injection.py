@@ -8,8 +8,12 @@ import pytest
 
 
 def test_dll_injection():
-    dll_path = (Path(__file__).parent / "test_inject/target/release/test_inject.dll").resolve()
-    exe_path = (Path(__file__).parent / "test_inject/target/release/inject_target.exe").resolve()
+    dll_path = (
+        Path(__file__).parent / "test_inject/target/release/test_inject.dll"
+    ).resolve()
+    exe_path = (
+        Path(__file__).parent / "test_inject/target/release/inject_target.exe"
+    ).resolve()
 
     if not dll_path.exists():
         pytest.skip(f"Test DLL not found at {dll_path}")

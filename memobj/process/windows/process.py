@@ -3,29 +3,31 @@ import ctypes.wintypes
 import functools
 import typing
 from pathlib import Path
-from typing import Self, Union
+from typing import Self
 
 import regex
 
 from memobj.allocation import Allocator
 from memobj.process import Process
 from memobj.process.windows.module import WindowsModule
-from memobj.process.windows.utils import \
-    WindowsMemoryProtection  # TODO: what was this going to be used for?
-from memobj.process.windows.utils import (LUID, LUID_AND_ATTRIBUTES,
-                                          PROCESSENTRY32, TOKEN_PRIVILEGES,
-                                          CheckWindowsOsError,
-                                          SingleLUIDAndAttributes,
-                                          WindowsMemoryBasicInformation,
-                                          WindowsModuleInfo)
+from memobj.process.windows.utils import (
+    WindowsMemoryProtection,
+)  # TODO: what was this going to be used for?
+from memobj.process.windows.utils import (
+    LUID,
+    LUID_AND_ATTRIBUTES,
+    PROCESSENTRY32,
+    TOKEN_PRIVILEGES,
+    CheckWindowsOsError,
+    SingleLUIDAndAttributes,
+    WindowsMemoryBasicInformation,
+)
 
 
-# TODO: update everything that uses modules to use the new WindowsModule
 class WindowsProcess(Process):
     def __init__(self, process_handle: int):
         self.process_handle = process_handle
 
-    # TODO: why are we getting debug privileges for our own process?
     @staticmethod
     def _get_debug_privileges():
         with CheckWindowsOsError():
@@ -411,25 +413,6 @@ class WindowsProcess(Process):
         else:
             return WindowsModule.get_all_modules(self)
 
-    # def get_module_name(self, module: WindowsModuleInfo) -> str:
-    #     with CheckWindowsOsError():
-    #         # https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmodulebasenamew
-    #         # I just assume MAX_PATH is good enough
-    #         name_buffer = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
-
-    #         success = ctypes.windll.psapi.GetModuleBaseNameW(
-    #             self.process_handle,
-    #             ctypes.c_void_p(module.lpBaseOfDll),
-    #             ctypes.byref(name_buffer),
-    #             ctypes.wintypes.MAX_PATH,
-    #         )
-
-    #         if success == 0:
-    #             raise ValueError(f"GetModuleBaseNameW failed for {module}")
-
-    #     return name_buffer.value
-
-    # TODO: return module here
     def get_module_named(self, name: str) -> WindowsModule:
         return WindowsModule.from_name(self, name)
 

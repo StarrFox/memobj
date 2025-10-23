@@ -17,7 +17,8 @@ Module(...)
 """
 
 import ctypes
-from typing import TYPE_CHECKING, Iterator, Self
+from typing import TYPE_CHECKING, Self
+from collections.abc import Iterator
 
 from memobj.process import Module
 
@@ -120,7 +121,7 @@ class WindowsModule(Module):
                     process=process,
                 )
             )
-        
+
         return modules
 
     def get_symbol_with_name(self, name: str) -> int:

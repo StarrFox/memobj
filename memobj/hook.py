@@ -6,8 +6,15 @@ from typing import TYPE_CHECKING, Any, Literal, Self, ClassVar
 from collections.abc import Callable
 
 import regex
-from iced_x86 import (BlockEncoder, Code, Decoder, FlowControl, Instruction,
-                      MemoryOperand, Register)
+from iced_x86 import (
+    BlockEncoder,
+    Code,
+    Decoder,
+    FlowControl,
+    Instruction,
+    MemoryOperand,
+    Register,
+)
 from iced_x86._iced_x86_py import Register as RegisterType
 
 from memobj.allocation import Allocation, Allocator
