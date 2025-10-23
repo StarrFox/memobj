@@ -6,7 +6,7 @@ default:
     just --list
 
 # run tests
-test:
+test: build-test-bins
     uv run pytest
 
 # does a version bump commit
@@ -55,9 +55,5 @@ build-test-dll:
 build-test-exe:
     if (!(Test-Path "tests/manual/test_inject/target/release/inject_target.dll")) { cargo build --release --manifest-path tests/manual/test_inject/Cargo.toml --bin inject_target }
 
-# run manual tests
-manual-test: build-test-dll build-test-exe
-    uv run pytest -rs --run-manual tests/manual/
-
-# run all tests
-all-tests: test manual-test
+# build test binaries
+build-test-bins: build-test-dll build-test-exe
