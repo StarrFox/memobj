@@ -39,9 +39,11 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
 
     - name: Build test binaries
+      if: steps.restore-cache-test.outputs.cache-hit != 'true'
       run: cargo build --release --manifest-path tests/manual/test_inject/Cargo.toml
 
     - name: Cache test binaries
+      if: steps.restore-cache-test.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: tests/manual/test_inject/target
