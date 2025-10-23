@@ -8,11 +8,17 @@ import pytest
 
 
 def test_dll_injection():
+    # there is probably a better way to get this
+    library_root = Path(__file__).parent.parent.parent
+
+    assert library_root.name == "memobj"
+    assert (library_root / "README.md").exists() is True
+
     dll_path = (
-        Path(__file__).parent / "test_inject/target/release/test_inject.dll"
+        library_root / "target/release/test_inject.dll"
     ).resolve()
     exe_path = (
-        Path(__file__).parent / "test_inject/target/release/inject_target.exe"
+        library_root / "target/release/inject_target.exe"
     ).resolve()
 
     if not dll_path.exists():

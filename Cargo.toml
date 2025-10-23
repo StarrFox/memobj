@@ -1,5 +1,6 @@
 [workspace]
 members = [
-    "tests/manual/test_inject"
+    "tests/manual/test_binaries/test_inject",
+    "tests/manual/test_binaries/inject_target"
 ]
 resolver = "2"

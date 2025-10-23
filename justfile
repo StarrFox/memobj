@@ -47,13 +47,6 @@ format:
     black .
     alejandra .
 
-# build test dll
-build-test-dll:
-    if (!(Test-Path "tests/manual/test_inject/target/release/test_inject.dll")) { cargo build --release --manifest-path tests/manual/test_inject/Cargo.toml }
-
-# build test exe
-build-test-exe:
-    if (!(Test-Path "tests/manual/test_inject/target/release/inject_target.dll")) { cargo build --release --manifest-path tests/manual/test_inject/Cargo.toml --bin inject_target }
-
 # build test binaries
-build-test-bins: build-test-dll build-test-exe
+build-test-bins:
+    cargo build --release

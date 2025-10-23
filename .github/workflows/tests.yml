@@ -31,8 +31,8 @@ jobs:
       id: restore-cache-test
       uses: actions/cache/restore@v4
       with:
-        path: tests/manual/test_inject/target
-        key: ${{ runner.os }}-${{ hashFiles('tests/manual/test_inject/src/**') }}
+        path: target
+        key: ${{ runner.os }}-${{ hashFiles('tests/manual/test_binaries/**') }}
 
     - name: Setup rust
       if: steps.restore-cache-test.outputs.cache-hit != 'true'
@@ -40,14 +40,14 @@ jobs:
 
     - name: Build test binaries
       if: steps.restore-cache-test.outputs.cache-hit != 'true'
-      run: cargo build --release --manifest-path tests/manual/test_inject/Cargo.toml
+      run: cargo build --release
 
     - name: Cache test binaries
       if: steps.restore-cache-test.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: tests/manual/test_inject/target
-        key: ${{ runner.os }}-${{ hashFiles('tests/manual/test_inject/src/**') }}
+        path: target
+        key: ${{ runner.os }}-${{ hashFiles('tests/manual/test_binaries/**') }}
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
