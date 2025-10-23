@@ -3,14 +3,26 @@ use std::fs::File;
 use std::io::Write;
 use std::os::raw::c_char;
 use windows::Win32::Foundation::HINSTANCE;
+use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
+use windows::Win32::System::Console::AllocConsole;
+
+
+// #[no_mangle]
+// extern "system" fn DllMain(_: *const u8, _: u32, _: *const u8) -> u32 { 1 }
 
 #[no_mangle]
-pub extern "system" fn DllMain(
-    _hinst_dll: HINSTANCE,
+extern "system" fn DllMain(
+    _hinst_dll: *const u8,
     _fdw_reason: u32,
-    _lpv_reserved: *mut std::ffi::c_void,
-) -> u32 {
-    1
+    _lpv_reserved: *const u8,
+) -> bool {
+    match _fdw_reason {
+        DLL_PROCESS_ATTACH => unsafe { AllocConsole() }.unwrap_or(()),
+        _ => ()
+    }
+
+    // return True on successful attach
+    true
 }
 
 

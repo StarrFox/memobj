@@ -60,7 +60,7 @@ build-test-exe:
 
 # run manual tests
 manual-test: build-test-dll build-test-exe
-    poetry run pytest -rs --run-manual tests/manual/
+    uv run pytest -rs --run-manual tests/manual/
 
 # run all tests
 all-tests: test manual-test
