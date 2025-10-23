@@ -3,9 +3,6 @@ name = "test_inject"
 version = "0.1.0"
 edition = "2021"
 
-[workspace]
-resolver = "2"
-
 [lib]
 crate-type = ["cdylib"]
 

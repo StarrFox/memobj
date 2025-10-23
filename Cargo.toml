@@ -2,3 +2,4 @@
 members = [
     "tests/manual/test_inject"
 ]
+resolver = "2"
