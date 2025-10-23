@@ -2,7 +2,6 @@ use std::ffi::CStr;
 use std::fs::File;
 use std::io::Write;
 use std::os::raw::c_char;
-use windows::Win32::Foundation::HINSTANCE;
 use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 use windows::Win32::System::Console::AllocConsole;
 
