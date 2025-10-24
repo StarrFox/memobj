@@ -48,7 +48,7 @@ def test_read_shared_pointer(process):
 
     shared = create_shared_pointer(200)
 
-    mem_obj = MemSharedPointer(address=ctypes.addressof(shared), process=process)
+    mem_obj = MemSharedPointer(address_source=lambda: ctypes.addressof(shared), process=process)
 
     assert mem_obj.reference.from_memory_deref().object.from_memory_deref().data == 200
 
@@ -62,7 +62,7 @@ def test_read_double_pointer(process):
 
     shared = create_shared_pointer(200)
 
-    mem_obj = MemSharedPointer(address=ctypes.addressof(shared), process=process)
+    mem_obj = MemSharedPointer(address_source=lambda: ctypes.addressof(shared), process=process)
 
     x: Pointer = mem_obj.reference
 

@@ -36,7 +36,7 @@ class Array(MemoryProperty):
         elements = []
 
         self._element_type.memory_object = MemoryObject(
-            address=self.offset_address,
+            address_source=lambda: self.offset_address,
             process=self.process,
         )
 
@@ -48,7 +48,7 @@ class Array(MemoryProperty):
 
     def to_memory(self, value: Any):
         self._element_type.memory_object = MemoryObject(
-            address=self.offset_address,
+            address_source=lambda: self.offset_address,
             process=self.process,
         )
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
+from memobj.utils import Type
+
 if TYPE_CHECKING:
     from memobj.object import MemoryObject
     from memobj.process import Process, WindowsProcess
@@ -15,8 +17,8 @@ class MemoryProperty(property):
     @property
     def process(self) -> "Process | WindowsProcess":
         assert self.memory_object is not None
-        assert self.memory_object.memobj_process is not None
-        return self.memory_object.memobj_process
+        assert self.memory_object._memobj_process is not None
+        return self.memory_object._memobj_process
 
     @property
     def offset_address(self) -> int:
@@ -37,8 +39,14 @@ class MemoryProperty(property):
     def read_formatted_from_offset(self, format_string: str) -> tuple[Any] | Any:
         return self.process.read_formatted(self.offset_address, format_string)
 
+    def read_typed_from_offset(self, read_type: Type):
+        return self.process.read_typed(self.offset_address, read_type)
+
     def write_formatted_to_offset(self, format_string: str, value: tuple[Any] | Any):
         self.process.write_formatted(self.offset_address, format_string, value)
+
+    def write_typed_from_offset(self, write_type: Type, value: Any):
+        return self.process.write_typed(self.offset_address, write_type, value)
 
     def _get_prelude(self, preluder: "MemoryObject"):
         self.memory_object = preluder

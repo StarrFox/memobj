@@ -2,6 +2,7 @@ import ctypes
 
 from memobj import MemoryObject
 from memobj.property import *
+from memobj.utils import Type
 
 
 # TODO: why do I use this instead of ctypes.addressof?
@@ -17,9 +18,12 @@ def test_simple_data(process):
     )
 
     class Test(MemoryObject):
-        other = SimpleData(0x0, format_string="i")
+        other = SimpleData(0x0, data_type=Type.unsigned4)
 
-    test_instance = Test(address=test_value_address, process=process)
+    test_instance = Test(
+        address_source=lambda: test_value_address,
+        process=process
+    )
 
     assert test_instance.other == 23
 
@@ -33,9 +37,9 @@ def test_simple_data_pointer(process):
     )
 
     class Test(MemoryObject, replace=True):
-        other = Pointer(0x0, SimpleData(format_string="i"))
+        other = Pointer(0x0, SimpleData(data_type=Type.unsigned4))
 
-    test_instance = Test(address=test_value_address, process=process)
+    test_instance = Test(address_source=lambda: test_value_address, process=process)
 
     assert test_instance.other.from_memory_deref() == 23
 
@@ -49,9 +53,9 @@ def test_simple_data_dereffed_pointer(process):
     )
 
     class Test(MemoryObject, replace=True):
-        other = DereffedPointer(0x0, SimpleData(format_string="i"))
+        other = DereffedPointer(0x0, SimpleData(data_type=Type.unsigned4))
 
-    test_instance = Test(address=test_value_address, process=process)
+    test_instance = Test(address_source=lambda: test_value_address, process=process)
 
     assert test_instance.other == 23
 
@@ -61,17 +65,17 @@ def test_nested_object(process):
     pointer_to_test_value = ctypes.pointer(test_value)
 
     # gets the address of the pointer
-    test_value_address = get_address_of_ctypes_obj(
+    test_value_address = lambda: get_address_of_ctypes_obj(
         pointer_to_test_value, process.pointer_format_string
     )
 
     class OtherTest(MemoryObject, replace=True):
-        value = SimpleData(0x0, format_string="i")
+        value = SimpleData(0x0, data_type=Type.unsigned4)
 
     class Test(MemoryObject, replace=True):
         other: Pointer = Pointer(0x0, OtherTest)
 
-    test_instance = Test(address=test_value_address, process=process)
+    test_instance = Test(address_source=test_value_address, process=process)
 
     assert test_instance.other.from_memory_deref().value == 23
 
@@ -89,8 +93,8 @@ def test_nested_object_forward_ref(process):
         other: Pointer = Pointer(0x0, "OtherTest")
 
     class OtherTest(MemoryObject, replace=True):
-        value = SimpleData(0x0, format_string="i")
+        value = SimpleData(0x0, data_type=Type.unsigned4)
 
-    test_instance = Test(address=test_value_address, process=process)
+    test_instance = Test(address_source=lambda: test_value_address, process=process)
 
     assert test_instance.other.from_memory_deref().value == 23

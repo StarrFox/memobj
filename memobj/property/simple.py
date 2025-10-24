@@ -1,75 +1,80 @@
 from __future__ import annotations
 import struct
-from typing import Any
+from typing import Any, Generic, TypeVar, ClassVar
 
+from memobj.utils import Type
 from . import MemoryProperty
 
 
-class SimpleData(MemoryProperty):
-    format_string: str | None = None
+T = TypeVar("T")
+
+
+class SimpleData(MemoryProperty, Generic[T]):
+    #format_string: ClassVar[str | None] = None
+    data_type: Type | None = None
 
     def __init__(
-        self, offset: int | None = None, format_string: str | None = None
+        self, offset: int | None = None, data_type: Type | None = None
     ):
         super().__init__(offset)
-        if format_string is not None:
-            self.format_string = format_string
+        if data_type is not None:
+            self.data_type = data_type
 
-    def _get_format(self) -> str:
-        if self.format_string is None:
-            raise ValueError(f"None format_string for {self.__class__.__name__}")
+    def _get_format(self) -> Type:
+        if self.data_type is None:
+            raise ValueError(f"None data_type for {self.__class__.__name__}")
 
-        return self.format_string
+        return self.data_type
 
-    def from_memory(self) -> Any:
-        return self.read_formatted_from_offset(self._get_format())
+    def from_memory(self) -> T:
+        return self.read_typed_from_offset(self._get_format())
 
     def to_memory(self, value: Any):
-        self.write_formatted_to_offset(self._get_format(), value)
+        self.write_typed_from_offset(self._get_format(), value)
 
     def memory_size(self) -> int:
-        return struct.calcsize(self._get_format())
+        return struct.calcsize(self._get_format().value)
 
 
 class Bool(SimpleData):
-    format_string = "?"
+    data_type = Type.bool
 
 
 class Float(SimpleData):
-    format_string = "f"
+    data_type = Type.float
 
 
 class Double(SimpleData):
-    format_string = "d"
+    data_type = Type.double
 
 
 class Signed1(SimpleData):
-    format_string = "b"
+    data_type = Type.signed1
 
 
 class Unsigned1(SimpleData):
-    format_string = "B"
+    data_type = data_type = Type.unsigned1
 
 
 class Signed2(SimpleData):
-    format_string = "h"
+    data_type = Type.signed2
 
 
 class Unsigned2(SimpleData):
-    format_string = "H"
+    data_type = data_type = Type.unsigned2
 
 
 class Signed4(SimpleData):
-    format_string = "i"
+    data_type = Type.signed4
 
 
 class Unsigned4(SimpleData):
-    format_string = "I"
+    data_type = Type.unsigned4
 
 
 class Signed8(SimpleData):
-    format_string = "q"
+    data_type = Type.signed8
 
 
 class Unsigned8(SimpleData):
-    format_string = "Q"
+    data_type = Type.unsigned8

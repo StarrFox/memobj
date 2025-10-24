@@ -59,15 +59,7 @@ class MemoryObject(metaclass=MemoryObjectMeta):
     # TODO: should this be named something else to prevent collisions with properties?
     @property
     def base_address(self) -> int:
-        if self._address_provider is not None:
-            return self._address_provider()
-
-        # TODO: deprecate this, the Pointer property can hold the offset i.e. player = Pointer(0x10, Player)
-        # the property-like usage
-        if self._base_address is None:
-            raise ValueError("Uninitialized memoryobject did not receieve an address")
-
-        return self._base_address
+        return self._address_source()
 
     @staticmethod
     def _resolve_string_class_lookup(class_name: str) -> type["MemoryObject"]:
@@ -87,22 +79,3 @@ class MemoryObject(metaclass=MemoryObjectMeta):
             )
 
         MemoryObject.__memory_object_instances__[class_name] = type_instance
-
-    if not TYPE_CHECKING:
-
-        def __getattribute__(self, name):
-            attr = super().__getattribute__(name)
-
-            if not isinstance(attr, MemoryObject):
-                return attr
-
-            if isinstance(self.__memory_properties__[name], Pointer):
-                return attr
-
-            if attr._offset is None:
-                raise ValueError("Offset not set")
-
-            attr._base_address = self.base_address + attr._offset
-            attr.memobj_process = self.memobj_process
-
-            return attr
