@@ -1,6 +1,8 @@
-from typing import TYPE_CHECKING, Callable, Union
+from __future__ import annotations
+from typing import TYPE_CHECKING, Callable
 
 from memobj.property import MemoryProperty, Pointer
+from memobj.utils import AddressSource
 
 if TYPE_CHECKING:
     from .process import Process, WindowsProcess
@@ -48,25 +50,11 @@ class MemoryObject(metaclass=MemoryObjectMeta):
 
     def __init__(
         self,
-        offset: Union[int, None] = None,
-        *,
-        address: Union[int, None] = None,
-        address_provider: Union[Callable[[], int], None] = None,
-        process: Union["Process", "WindowsProcess", None] = None,
+        address_source: AddressSource,
+        process: Process,
     ):
-        if address is not None and address_provider is not None:
-            raise ValueError("both address and address_provider cannot be provided")
-
-        if (address is not None or address_provider is not None) and process is None:
-            raise ValueError("process must be provided if address/address_provider are")
-
-        if process is not None and (address is None and address_provider is None):
-            raise ValueError("address/address_provider must be provided if process is")
-
-        self._offset = offset
-        self._base_address = address
-        self._address_provider = address_provider
-        self.memobj_process = process
+        self._address_source = address_source
+        self._memobj_process = process
 
     # TODO: should this be named something else to prevent collisions with properties?
     @property

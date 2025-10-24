@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Any, Optional, Union
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from memobj.object import MemoryObject
@@ -9,10 +10,10 @@ class MemoryProperty(property):
     def __init__(self, offset: int | None):
         super().__init__(self._get_prelude, self._set_prelude)
         self.offset: int | None = offset
-        self.memory_object: Optional["MemoryObject"] = None
+        self.memory_object: "MemoryObject | None" = None
 
     @property
-    def process(self) -> Union["Process", "WindowsProcess"]:
+    def process(self) -> "Process | WindowsProcess":
         assert self.memory_object is not None
         assert self.memory_object.memobj_process is not None
         return self.memory_object.memobj_process

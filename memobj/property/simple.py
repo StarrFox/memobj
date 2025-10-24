@@ -1,14 +1,15 @@
+from __future__ import annotations
 import struct
-from typing import Any, Union
+from typing import Any
 
 from . import MemoryProperty
 
 
 class SimpleData(MemoryProperty):
-    format_string: Union[str, None] = None
+    format_string: str | None = None
 
     def __init__(
-        self, offset: int | None = None, format_string: Union[str, None] = None
+        self, offset: int | None = None, format_string: str | None = None
     ):
         super().__init__(offset)
         if format_string is not None:

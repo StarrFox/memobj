@@ -1,5 +1,6 @@
+from __future__ import annotations
 from copy import copy
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any
 
 from . import MemoryProperty
 
@@ -22,7 +23,7 @@ class Pointer(MemoryProperty):
     def __init__(
         self,
         offset: int | None,
-        pointed_type: Union[str, MemoryProperty, "MemoryObject", type["MemoryObject"]],
+        pointed_type: str | MemoryProperty | MemoryObject | type[MemoryObject],
     ):
         super().__init__(offset)
 
@@ -43,7 +44,7 @@ class Pointer(MemoryProperty):
     def handle_null(self) -> Any:
         raise ValueError("null pointer cannot be dereferenced")
 
-    def cast(self, new_type: Union[MemoryProperty, "MemoryObject"]) -> "Pointer":
+    def cast(self, new_type: MemoryProperty | MemoryObject) -> Pointer:
         # New pointer to same address but with changed type.
         return Pointer(self.offset, new_type)
 

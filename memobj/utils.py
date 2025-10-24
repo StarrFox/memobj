@@ -2,8 +2,11 @@ import operator
 import struct
 import time
 from enum import Enum
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, TypeAlias
 from collections.abc import Callable
+
+# source() -> int
+AddressSource: TypeAlias = Callable[[], int]
 
 # TODO: remove when dropping 3.11 support
 T = TypeVar("T")
