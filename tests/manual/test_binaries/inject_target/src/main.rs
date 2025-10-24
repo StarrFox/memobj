@@ -1,16 +1,11 @@
 use std::str::FromStr;
 
 fn main() {
-    std::hint::black_box(add_five);
-    std::hint::black_box(create_player);
-    std::hint::black_box(uses_player);
-
-    let value = std::hint::black_box(add_five(60 * 1_000_000));
-
-    // This process just waits, so it can be injected into.
-    //std::thread::sleep(std::time::Duration::from_secs(60 * 5));
-    //std::thread::sleep(std::time::Duration::from_secs(60 * 1_000_000));
-    std::thread::sleep(std::time::Duration::from_secs(value as u64));
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::hint::black_box(add_five(1));
+        std::hint::black_box(create_player());
+    }
 }
 
 // static gives us a global address rather than in-lining the value
@@ -52,11 +47,13 @@ impl Player {
 
 // TODO: keep these from getting compiled away
 #[no_mangle]
+#[inline(never)]
 extern "C" fn add_five(value: u32) -> u32 {
     value + FIVE
 }
 
 #[no_mangle]
+#[inline(never)]
 extern "C" fn create_player() -> () {
     let player = Player::new();
 
@@ -64,6 +61,7 @@ extern "C" fn create_player() -> () {
 }
 
 #[no_mangle]
+#[inline(never)]
 extern "C" fn uses_player(player: &Player) -> () {
     // cmp with object offset
     if player.health > 100.0 {

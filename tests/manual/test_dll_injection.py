@@ -1,30 +1,15 @@
 import subprocess
-import pytest
-from pathlib import Path
+
+from iced_x86 import Register
+import regex
 
 import memobj
+from memobj.utils import ValueWaiter
+from memobj.hook import create_capture_hook, RegisterCaptureSettings
 
-import pytest
 
-
-def test_dll_injection():
-    # there is probably a better way to get this
-    library_root = Path(__file__).parent.parent.parent
-
-    assert library_root.name == "memobj"
-    assert (library_root / "README.md").exists() is True
-
-    dll_path = (
-        library_root / "target/release/test_inject.dll"
-    ).resolve()
-    exe_path = (
-        library_root / "target/release/inject_target.exe"
-    ).resolve()
-
-    if not dll_path.exists():
-        pytest.skip(f"Test DLL not found at {dll_path}")
-    if not exe_path.exists():
-        pytest.skip(f"Test EXE not found at {exe_path}")
+def test_dll_injection(test_binaries):
+    exe_path, dll_path = test_binaries
 
     proc = subprocess.Popen([str(exe_path)])
     try:
@@ -35,3 +20,30 @@ def test_dll_injection():
         assert module is not None, "Failed to find injected DLL in remote process"
     finally:
         proc.terminate()
+
+
+def test_create_capture_hook(test_binaries):
+    exe_path, _ = test_binaries
+
+    # TODO: allow passing addresses so we can do a symbol lookup
+    PlayerCaptureHook = create_capture_hook(
+        pattern=regex.escape(bytes.fromhex("48 83 EC 28 F3 0F 10 41 04 0F 2E 05 40 52 01 00 76 0D 8B 09 E8 17 FF FF FF 01 05 21 D0 01 00 48 83 C4 28 C3")),
+        module="inject_target.exe",
+        bitness=64,
+        register_captures=[RegisterCaptureSettings(Register.RCX, derefference=False)],
+    )
+
+    proc = subprocess.Popen([str(exe_path)])
+    try:
+        process = memobj.WindowsProcess.from_id(proc.pid)
+        hook = PlayerCaptureHook(process)
+        hook.activate()
+        rcx_capture = hook.get_variable("RCX_capture")
+
+        waiter = ValueWaiter(lambda: rcx_capture.read_typed(process.pointer_type))
+        address = waiter.wait_for_value(0, inverse=True, timeout=60)
+
+        assert address != 0
+    finally:
+        proc.terminate()
+

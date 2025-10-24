@@ -113,7 +113,7 @@ class Hook:
         """Called when the hook is activated to get the code to put in the hook"""
         raise NotImplementedError()
 
-    def allocate_variable(self, name: str, size: int) -> Allocation:
+    def allocate_variable(self, name: str, size: int, *, preferred_start: int | None = None) -> Allocation:
         """
         Allocate a variable of the specified size for use in the hook, retrievable with get_variable.
 
@@ -122,6 +122,7 @@ class Hook:
                 The name of the variable to allocate.
             size: int
                 The size of the memory block to allocate.
+            preferred_start: The preferred start address of the allocation
 
         Returns:
             Allocation
@@ -134,7 +135,7 @@ class Hook:
         if self._variables.get("name") is not None:
             raise ValueError(f"Variable {name} is already allocated")
 
-        allocation = self.allocator.allocate(size)
+        allocation = self.allocator.allocate(size, preferred_start=preferred_start)
         self._variables[name] = allocation
         return allocation
 
@@ -338,7 +339,7 @@ class JmpHook(Hook):
         else:
             bitness = 32
 
-        decoder = Decoder(bitness, search_bytes, ip=jump_address)
+        decoder = Decoder(bitness, search_bytes, ip=0)
 
         for instruction in decoder:
             # NOTE: this is not a None check, Instruction has special bool() handling
@@ -503,7 +504,7 @@ pop r9
 @dataclass
 class RegisterCaptureSettings:
     register: RegisterType
-    derefference: bool = True
+    derefference: bool = False
     offset: int = 0
 
 

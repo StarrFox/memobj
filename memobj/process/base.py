@@ -49,12 +49,19 @@ class Process:
         """
         raise NotImplementedError()
 
-    @functools.cached_property
+    @property
     def pointer_format_string(self) -> str:
         if self.process_64_bit:
             return "Q"
         else:
             return "I"
+
+    @property
+    def pointer_type(self) -> Type:
+        if self.process_64_bit:
+            return Type.unsigned8
+        else:
+            return Type.unsigned4
 
     @functools.cached_property
     def pointer_size(self) -> int:
@@ -92,12 +99,13 @@ class Process:
     # TODO
     # def itererate_modules(self): ...
 
-    def allocate_memory(self, size: int) -> int:
+    def allocate_memory(self, size: int, *, preferred_start: int | None = None) -> int:
         """
         Allocate <size> amount of memory in the process
 
         Args:
             size: The amount of memory to allocate
+            preferred_start: The preferred start address of the allocation
 
         Returns:
         The start address of the allocated memory

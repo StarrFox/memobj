@@ -6,9 +6,6 @@ use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 use windows::Win32::System::Console::AllocConsole;
 
 
-// #[no_mangle]
-// extern "system" fn DllMain(_: *const u8, _: u32, _: *const u8) -> u32 { 1 }
-
 #[no_mangle]
 extern "system" fn DllMain(
     _hinst_dll: *const u8,
@@ -33,11 +30,14 @@ pub extern "C" fn create_file_at_path(path: *const c_char) -> bool {
 
     let c_str = unsafe { CStr::from_ptr(path) };
 
-    if let Ok(path_str) = c_str.to_str() {
-        if let Ok(mut file) = File::create(path_str) {
-            return file.write_all(b"Injected").is_ok()
-        }
-    }
+    let Ok(path_str) = c_str.to_str() else {
+        return false;
+    };
 
-    false
+    let Ok(mut file) = File::create(path_str) else {
+        return false;
+    };
+
+    file.write_all(b"Injected").is_ok()
+
 }

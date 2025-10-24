@@ -78,7 +78,7 @@ class Allocator:
     def closed(self) -> bool:
         return self._is_closed
 
-    def allocate(self, size: int) -> Allocation:
+    def allocate(self, size: int, *, preferred_start: int | None = None) -> Allocation:
         """
         Allocates a block of memory for the process.
 
@@ -89,11 +89,12 @@ class Allocator:
 
         Args:
             size (int): The size of the memory block to allocate in bytes.
+            preferred_start: The preferred start address of the allocation
 
         Returns:
             Allocation: An object representing the allocated memory block.
         """
-        address = self.process.allocate_memory(size)
+        address = self.process.allocate_memory(size, preferred_start=preferred_start)
         allocation = Allocation(address, self.process, size)
         self.allocations.append(allocation)
         return allocation
