@@ -18,6 +18,7 @@ from iced_x86 import (
 from iced_x86._iced_x86_py import Register as RegisterType
 
 from memobj.allocation import Allocation, Allocator
+from memobj.utils import wait_for_value
 
 if TYPE_CHECKING:
     from memobj.process import Process
@@ -164,6 +165,20 @@ class Hook:
             return self._variables[name]
         except KeyError:
             raise ValueError(f"Variable {name} has not been allocated")
+
+    def wait_variable_non_zero(self, name: str, *, timeout: float | None = None) -> int:
+        """Waits for a variable to be non-zero
+
+        Args:
+            name (str): The name of the variable
+            timeout (float | None, optional): How long to wait for it to be non-zero. Defaults to None.
+
+        Returns:
+            int: The value of the variable
+        """
+        allocation = self.get_variable(name)
+        value, _ = wait_for_value(lambda: allocation.read_typed(self.process.pointer_type), 0, inverse=True, timeout=timeout)
+        return value
 
     def activate(self) -> dict[str, Allocation]:
         """Activate the hook"""
