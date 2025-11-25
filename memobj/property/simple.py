@@ -30,6 +30,10 @@ class SimpleData(MemoryProperty):
         return struct.calcsize(self._get_format())
 
 
+class Char(SimpleData):
+    format_string = "c"
+
+
 class Bool(SimpleData):
     format_string = "?"
 
