@@ -4,7 +4,7 @@ from iced_x86 import Register
 import regex
 
 import memobj
-from memobj.utils import ValueWaiter
+from memobj.utils import wait_for_value
 from memobj.hook import create_capture_hook, RegisterCaptureSettings
 
 
@@ -39,9 +39,7 @@ def test_create_capture_hook(test_binaries):
         hook = PlayerCaptureHook(process)
         hook.activate()
         rcx_capture = hook.get_variable("RCX_capture")
-
-        waiter = ValueWaiter(lambda: rcx_capture.read_typed(process.pointer_type))
-        address = waiter.wait_for_value(0, inverse=True, timeout=60)
+        address = wait_for_value(lambda: rcx_capture.read_typed(process.pointer_type), 0, inverse=True, timeout=60)
 
         assert address != 0
     finally:
