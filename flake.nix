@@ -22,12 +22,12 @@
         self',
         ...
       }: let
-        python = pkgs.python311;
+        python = pkgs.python312;
       in {
         devShells.default = pkgs.mkShell {
           name = "memobj";
           packages = with pkgs; [
-            (poetry.withPlugins(ps: with ps; [poetry-plugin-up]))
+            uv
             python
             just
             alejandra
