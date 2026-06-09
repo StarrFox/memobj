@@ -16,7 +16,8 @@ def process() -> Process:
         case "win32":
             return WindowsProcess.from_id(os.getpid())
         case _:
-            raise RuntimeError("Unsupported platform")
+            pytest.skip("Unsupported platform")
+            #raise RuntimeError("Unsupported platform")
 
 
 @pytest.fixture(scope="session")
