@@ -29,7 +29,7 @@ my_int = PythonIntObject(address=id(1), process=process)
 print(my_int.value)
 ```
 
-See tests for more examples (pointer properties, process/module utilities, etc.).
+See the [documentation](https://memobj.readthedocs.io/en/latest/) or tests for more examples (pointer properties, process/module utilities, etc.).
 
 ## Development setup
 

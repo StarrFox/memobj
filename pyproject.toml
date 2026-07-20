@@ -15,6 +15,7 @@ dependencies = [
 ]
 
 [project.urls]
+Documentation = "https://memobj.readthedocs.io/en/latest/"
 Repository = "https://github.com/StarrFox/memobj"
 Issues = "https://github.com/StarrFox/memobj/issues"
 
