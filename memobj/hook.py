@@ -153,13 +153,10 @@ class Hook:
             name (str): The name of the variable to retrieve.
 
         Returns:
-        Allocation
-            The allocated variable corresponding to the given name.
+            Allocation: The allocated variable corresponding to the given name.
 
         Raises:
-        ValueError
-            If the variable with the specified name does not exist in the
-            allocation storage.
+            ValueError: If the variable with the specified name does not exist.
         """
         try:
             return self._variables[name]

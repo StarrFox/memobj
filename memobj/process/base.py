@@ -257,6 +257,15 @@ class Process:
         *,
         endianness: ProcessEndianness = ProcessEndianness.native,
     ) -> None:
+        """
+        Write a value to memory using a Type enum member to determine the struct format.
+
+        Args:
+            address: The address to write to
+            write_type: The Type enum member describing the data format (e.g. Type.signed4, Type.float)
+            value: The value to write
+            endianness: Byte order to use when packing; defaults to native
+        """
         match endianness:
             case ProcessEndianness.native:
                 endianness_string = "="
@@ -271,4 +280,23 @@ class Process:
 
         return self.write_formatted(address, combined_format, value)
 
-    # TODO: scan_formatted? scan_formatted(format_string, value)
+    def scan_formatted(
+        self,
+        format_string: str,
+        value: tuple[Any] | Any,
+        *,
+        module: str | None = None,
+    ) -> list[int]:
+        """
+        Scan memory for a value packed using a struct format string.
+
+        Args:
+            format_string: The format string to pass to struct.pack
+            value: The value to search for
+            module: Name of a module to exclusively search
+
+        Returns:
+        A list of addresses that matched
+        """
+        packed = struct.pack(format_string, value)
+        return self.scan_memory(packed, module=module)

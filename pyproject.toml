@@ -19,6 +19,11 @@ Repository = "https://github.com/StarrFox/memobj"
 Issues = "https://github.com/StarrFox/memobj/issues"
 
 [dependency-groups]
+docs = [
+    "sphinx>=7.0",
+    "furo",
+    "myst-parser",
+]
 tests = [
     "mypy>=2.1.0",
     "pytest>=9.0.3",
