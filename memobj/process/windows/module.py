@@ -17,12 +17,13 @@ Module(...)
 """
 
 import ctypes
+import time
 from typing import TYPE_CHECKING, Self
 from collections.abc import Iterator
 
 from memobj.process import Module
 
-from .utils import CheckWindowsOsError, ModuleEntry32
+from .utils import ModuleEntry32
 
 if TYPE_CHECKING:
     from .process import WindowsProcess
@@ -30,6 +31,11 @@ if TYPE_CHECKING:
 
 INVALID_HANDLE_VALUE: int = -1
 TH32CS_SNAPMODULE: int = 0x8
+# https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
+ERROR_NO_MORE_FILES: int = 18
+# how long to keep retrying a snapshot of a freshly spawned process whose
+# module list isn't populated yet
+MODULE_LIST_RETRY_TIMEOUT: float = 5.0
 
 
 class WindowsModule(Module):
@@ -44,7 +50,14 @@ class WindowsModule(Module):
         Note that the yielded modules are only valid for one iteration, i.e. references to them should not
         be stored
         """
-        with CheckWindowsOsError():
+        module_entry = ModuleEntry32()
+        module_entry.dwSize = ctypes.sizeof(ModuleEntry32)
+
+        # a process that was just spawned can briefly report an empty module
+        # list (Module32First fails with ERROR_NO_MORE_FILES) before it has
+        # finished loading its modules, so retry for a bit instead of failing
+        deadline = time.monotonic() + MODULE_LIST_RETRY_TIMEOUT
+        while True:
             # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot
             module_snapshot = ctypes.windll.kernel32.CreateToolhelp32Snapshot(
                 TH32CS_SNAPMODULE, process.process_id
@@ -53,17 +66,23 @@ class WindowsModule(Module):
             if module_snapshot == INVALID_HANDLE_VALUE:
                 raise ValueError("Creating module snapshot failed")
 
-            module_entry = ModuleEntry32()
-            module_entry.dwSize = ctypes.sizeof(ModuleEntry32)
-
             # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-module32first
             success = ctypes.windll.kernel32.Module32First(
                 module_snapshot, ctypes.byref(module_entry)
             )
 
-            if success == 0:
-                raise ValueError("Get first module failed")
+            if success != 0:
+                break
 
+            last_error = ctypes.windll.kernel32.GetLastError()
+            ctypes.windll.kernel32.CloseHandle(module_snapshot)
+
+            if last_error != ERROR_NO_MORE_FILES or time.monotonic() > deadline:
+                raise ctypes.WinError(last_error)
+
+            time.sleep(0.05)
+
+        try:
             yield module_entry
 
             # https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-module32next
@@ -74,7 +93,7 @@ class WindowsModule(Module):
                 != 0
             ):
                 yield module_entry
-
+        finally:
             # https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-closehandle
             ctypes.windll.kernel32.CloseHandle(module_snapshot)
 
