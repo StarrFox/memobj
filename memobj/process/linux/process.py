@@ -14,7 +14,8 @@ import regex
 from memobj.process.base import Process
 from memobj.process.linux.module import LinuxModule
 
-_libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+_libc_name = ctypes.util.find_library("c")
+_libc = ctypes.CDLL(_libc_name, use_errno=True) if _libc_name else None
 
 _PROT_READ = 0x1
 _PROT_WRITE = 0x2
@@ -96,6 +97,7 @@ class LinuxMemoryRegion:
 
 def _ptrace(request: int, pid: int, addr: int = 0, data: int = 0) -> int:
     """Low-level ptrace call. Raises OSError on failure (except PEEK which needs special handling)."""
+    assert _libc is not None
     _libc.ptrace.restype = ctypes.c_long
     _libc.ptrace.argtypes = [
         ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong
@@ -106,6 +108,7 @@ def _ptrace(request: int, pid: int, addr: int = 0, data: int = 0) -> int:
 
 def _ptrace_peek(pid: int, addr: int) -> int:
     """Peek a word from target process memory. Returns unsigned 64-bit value."""
+    assert _libc is not None
     ctypes.set_errno(0)
     _libc.ptrace.restype = ctypes.c_long
     _libc.ptrace.argtypes = [
@@ -583,6 +586,7 @@ class LinuxProcess(Process):
                 return self._remote_mmap_near(size, preferred_start)
             return self._remote_mmap(size)
 
+        assert _libc is not None
         _libc.mmap.restype = ctypes.c_size_t
         _libc.mmap.argtypes = [
             ctypes.c_void_p,
@@ -615,6 +619,7 @@ class LinuxProcess(Process):
             self._remote_munmap(address, size)
             return
 
+        assert _libc is not None
         _libc.munmap.restype = ctypes.c_int
         _libc.munmap.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
         result = _libc.munmap(ctypes.c_void_p(address), size)
