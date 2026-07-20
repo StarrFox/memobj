@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from memobj import Process, WindowsProcess
+from memobj import Process
 
 
 @pytest.fixture(scope="session")
@@ -14,10 +14,13 @@ def process() -> Process:
     """
     match sys.platform:
         case "win32":
+            from memobj import WindowsProcess
             return WindowsProcess.from_id(os.getpid())
+        case "linux":
+            from memobj import LinuxProcess
+            return LinuxProcess.from_id(os.getpid())
         case _:
             pytest.skip("Unsupported platform")
-            #raise RuntimeError("Unsupported platform")
 
 
 @pytest.fixture(scope="session")
@@ -29,8 +32,15 @@ def test_binaries() -> tuple[Path, Path]:
 
     release_dir = library_root / "target" / "release"
 
-    exe_path = (release_dir / "inject_target.exe").resolve()
-    dll_path = (release_dir / "test_inject.dll").resolve()
+    match sys.platform:
+        case "win32":
+            exe_path = (release_dir / "inject_target.exe").resolve()
+            dll_path = (release_dir / "test_inject.dll").resolve()
+        case "linux":
+            exe_path = (release_dir / "inject_target").resolve()
+            dll_path = (release_dir / "libtest_inject.so").resolve()
+        case _:
+            pytest.skip("Unsupported platform")
 
     if not exe_path.exists() or not dll_path.exists():
         pytest.skip("Test binaries not found")

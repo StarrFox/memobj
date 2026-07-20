@@ -282,7 +282,7 @@ class JmpHook(Hook):
         bitness = 64 if self.process.process_64_bit else 32
 
         allocation_size = sum(map(len, hook_instructions))
-        hook_allocation = self.allocate_variable("hook_site", allocation_size)
+        hook_allocation = self.allocate_variable("hook_site", allocation_size, preferred_start=target_address)
         hook_code = instructions_to_code(
             hook_instructions, hook_allocation.address, bitness=bitness
         )
@@ -351,7 +351,7 @@ class JmpHook(Hook):
         else:
             bitness = 32
 
-        decoder = Decoder(bitness, search_bytes, ip=0)
+        decoder = Decoder(bitness, search_bytes, ip=jump_address)
 
         for instruction in decoder:
             # NOTE: this is not a None check, Instruction has special bool() handling
@@ -377,11 +377,10 @@ class JmpHook(Hook):
                             f"Original code contains a far branch: {instruction}"
                         )
 
-                    # TODO: try and fix the jump instead
-                    if not near_target < self._jump_needed - position:
-                        raise ValueError(
-                            f"Original code contains a near jump outside of captured code: {instruction}"
-                        )
+                    # Near branches are handled by BlockEncoder:
+                    # - Branches to instructions within this set: automatically linked
+                    # - Branches outside this set: encoded to the original absolute target
+                    #   (safe because the original code at that address is not modified)
 
                 # TODO: figure out how xbegin works
                 case FlowControl.XBEGIN_XABORT_XEND:
