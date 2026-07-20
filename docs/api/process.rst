@@ -17,6 +17,24 @@ Module
    :undoc-members:
    :show-inheritance:
 
+Linux (platform-specific)
+-------------------------
+
+.. autoclass:: memobj.process.linux.process.LinuxProcess
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: memobj.process.linux.process.LinuxMemoryRegion
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: memobj.process.linux.module.LinuxModule
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Windows (platform-specific)
 ---------------------------
 

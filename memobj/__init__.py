@@ -2,7 +2,7 @@ import logging
 
 from .allocation import Allocation, Allocator
 from .object import MemoryObject
-from .process import Process, WindowsProcess
+from .process import Process, LinuxProcess, WindowsProcess
 from . import property
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,7 @@ __all__ = [
     "Allocator",
     "MemoryObject",
     "Process",
+    "LinuxProcess",
     "WindowsProcess",
     "property",
 ]

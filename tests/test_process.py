@@ -1,10 +1,20 @@
+import sys
+
+
 def test_get_module_name(process):
     base_module = process.get_modules(True)
-    assert base_module.name == "python.exe"
+    if sys.platform == "win32":
+        assert base_module.name == "python.exe"
+    else:
+        assert "python" in base_module.name.lower()
 
 
 def test_get_module_named(process):
-    process.get_module_named("python.exe")
+    if sys.platform == "win32":
+        process.get_module_named("python.exe")
+    else:
+        base = process.get_modules(True)
+        process.get_module_named(base.name)
 
 
 # TODO: find a version independent way to test this
