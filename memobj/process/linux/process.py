@@ -24,6 +24,8 @@ _MAP_PRIVATE = 0x2
 _MAP_ANONYMOUS = 0x20
 _MAP_FAILED: int = ctypes.c_size_t(-1).value
 
+_MAP_FIXED = 0x10
+
 _PTRACE_PEEKTEXT = 1
 _PTRACE_POKETEXT = 4
 _PTRACE_CONT = 7
@@ -669,53 +671,122 @@ class LinuxProcess(Process):
         if self._pid == os.getpid():
             ctypes.memmove(address, value, len(value))
             return
+        if not value:
+            return
 
-        # Write by running shellcode inside the target process itself.
-        # PTRACE_POKETEXT from the outside can be silently swallowed by
-        # container runtimes (e.g. gVisor) for r-xp code pages; having the
-        # process write to its own memory via mprotect+store always works.
+        # On GitHub Actions (Ubuntu 24.04 / Azure KVM), writes to file-backed
+        # r-xp code pages via PTRACE_POKETEXT or in-process stores do not
+        # persist: they appear to succeed but the underlying physical page is
+        # never modified (hypervisor-level W^X enforcement).
+        #
+        # Strategy: for each 4 KB page touched by the write:
+        # 1. Read the current page content via PTRACE_PEEKTEXT.
+        # 2. Patch our bytes into the copy.
+        # 3. Run a shellcode that calls mmap(page, 4096, RWX,
+        #    MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0), atomically replacing
+        #    the (possibly file-backed) page with a fresh anonymous page.
+        # 4. Write the patched content back via PTRACE_POKETEXT — anonymous
+        #    pages are not subject to the W^X barrier and always accept writes.
         page_size = 0x1000
-        page_addr = address & ~(page_size - 1)
-        # Cover all pages touched by the write (handle page-crossing writes).
-        last_page = (address + len(value) - 1) & ~(page_size - 1)
-        mprotect_len = last_page - page_addr + page_size
-        prot_rwx = _PROT_READ | _PROT_WRITE | _PROT_EXEC
-        _MPROTECT_SYSCALL = 10
 
-        shellcode = bytearray()
-        shellcode += b"\x48\x83\xE4\xF0"                                      # and rsp, ~15
-        # mprotect(page_addr, mprotect_len, PROT_READ|PROT_WRITE|PROT_EXEC)
-        shellcode += b"\x48\xBF" + struct.pack("<Q", page_addr)               # mov rdi, page_addr
-        shellcode += b"\x48\xBE" + struct.pack("<Q", mprotect_len)            # mov rsi, len
-        shellcode += b"\x48\xBA" + struct.pack("<Q", prot_rwx)                # mov rdx, prot
-        shellcode += b"\x48\xC7\xC0" + struct.pack("<I", _MPROTECT_SYSCALL)  # mov eax, 10
-        shellcode += b"\x0F\x05"                                               # syscall
-        # Write each byte: keep target address in RDI, increment as we go
-        shellcode += b"\x48\xBF" + struct.pack("<Q", address)                 # mov rdi, address
-        for i, byte in enumerate(value):
-            if i == 0:
-                shellcode += b"\xC6\x07" + bytes([byte])                      # mov byte [rdi], imm8
-            else:
-                shellcode += b"\x48\xFF\xC7"                                  # inc rdi
-                shellcode += b"\xC6\x07" + bytes([byte])                      # mov byte [rdi], imm8
-        shellcode += b"\xCC"                                                   # int3
-        sc = bytes(shellcode)
+        first_page = address & ~(page_size - 1)
+        last_page  = (address + len(value) - 1) & ~(page_size - 1)
+        page_addr  = first_page
 
-        # _ptrace_exec saves/restores the bytes at its chosen exec region.
-        # If that region overlaps [address, address+len(value)), the restore
-        # would overwrite the bytes we just wrote via in-process stores.
-        # Find the first executable region that does NOT overlap our write.
-        write_end = address + len(value)
-        safe_exec_addr: int | None = None
-        for start, end, perms, *_ in self._iter_maps():
-            if "x" not in perms or end - start < len(sc) + 8:
-                continue
-            if start < write_end and address < end:
-                continue  # overlaps the write destination — skip
-            safe_exec_addr = start
-            break
+        import signal as _signal
 
-        self._ptrace_exec(sc, exec_addr=safe_exec_addr)
+        while page_addr <= last_page:
+            chunk_start  = max(address, page_addr)
+            chunk_end    = min(address + len(value), page_addr + page_size)
+            page_offset  = chunk_start - page_addr
+            value_offset = chunk_start - address
+            chunk_len    = chunk_end - chunk_start
+
+            ret = _ptrace(_PTRACE_ATTACH, self._pid)
+            if ret < 0:
+                err = ctypes.get_errno()
+                raise OSError(err, os.strerror(err), "PTRACE_ATTACH failed")
+            os.waitpid(self._pid, 0)
+
+            try:
+                regs = _UserRegsStruct()
+                _ptrace(_PTRACE_GETREGS, self._pid, 0, ctypes.addressof(regs))
+
+                # Save the full page so surrounding bytes are preserved after
+                # MAP_FIXED zeroes it out.
+                original_page = _peek_bytes(self._pid, page_addr, page_size)
+                patched_page  = bytearray(original_page)
+                patched_page[page_offset:page_offset + chunk_len] = (
+                    value[value_offset:value_offset + chunk_len]
+                )
+
+                # Shellcode: mmap(page_addr, page_size, RWX,
+                #                 MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0)
+                mmap_flags = _MAP_PRIVATE | _MAP_ANONYMOUS | _MAP_FIXED
+                shellcode = (
+                    b"\x48\x83\xE4\xF0" +
+                    b"\x48\xBF" + struct.pack("<Q", page_addr) +
+                    b"\x48\xBE" + struct.pack("<Q", page_size) +
+                    b"\x48\xBA" + struct.pack("<Q", _PROT_READ | _PROT_WRITE | _PROT_EXEC) +
+                    b"\x49\xBA" + struct.pack("<Q", mmap_flags) +
+                    b"\x49\xB8" + struct.pack("<Q", 0xFFFFFFFF_FFFFFFFF) +
+                    b"\x49\xB9" + struct.pack("<Q", 0) +
+                    b"\x48\xC7\xC0" + struct.pack("<I", _MMAP_SYSCALL) +
+                    b"\x0F\x05" +
+                    b"\xCC"
+                )
+
+                # Pick exec_addr from a page that is NOT the one we're replacing.
+                exec_addr: int | None = None
+                for start, end, perms, *_ in self._iter_maps():
+                    if "x" not in perms or end - start < len(shellcode) + 8:
+                        continue
+                    if (start & ~(page_size - 1)) == page_addr:
+                        continue
+                    exec_addr = start
+                    break
+
+                if exec_addr is None:
+                    raise RuntimeError(
+                        f"No exec region for write_memory shellcode (page {hex(page_addr)})"
+                    )
+
+                orig_exec = _peek_bytes(self._pid, exec_addr, len(shellcode))
+                _poke_bytes(self._pid, exec_addr, shellcode)
+
+                new_regs = _UserRegsStruct.from_buffer_copy(bytearray(regs))
+                new_regs.rip = exec_addr
+                new_regs.orig_rax = 0xFFFFFFFF_FFFFFFFF
+                _ptrace(_PTRACE_SETREGS, self._pid, 0, ctypes.addressof(new_regs))
+
+                _ptrace(_PTRACE_CONT, self._pid, 0, 0)
+                _, wstatus = os.waitpid(self._pid, 0)
+
+                if not os.WIFSTOPPED(wstatus) or os.WSTOPSIG(wstatus) != _signal.SIGTRAP:
+                    sig = os.WSTOPSIG(wstatus) if os.WIFSTOPPED(wstatus) else -1
+                    raise RuntimeError(
+                        f"MAP_FIXED mmap shellcode got signal {sig} (expected SIGTRAP)"
+                    )
+
+                result_regs = _UserRegsStruct()
+                _ptrace(_PTRACE_GETREGS, self._pid, 0, ctypes.addressof(result_regs))
+                if result_regs.rax != page_addr:
+                    raise RuntimeError(
+                        f"MAP_FIXED mmap at {hex(page_addr)} failed: rax={hex(result_regs.rax)}"
+                    )
+
+                # page_addr is now a fresh anonymous RWX page (zeroed).
+                # PTRACE_POKETEXT to anonymous pages is reliable — write patched content.
+                _poke_bytes(self._pid, page_addr, bytes(patched_page))
+
+                # Restore exec_addr and CPU registers before detaching.
+                _poke_bytes(self._pid, exec_addr, orig_exec)
+                _ptrace(_PTRACE_SETREGS, self._pid, 0, ctypes.addressof(regs))
+
+            finally:
+                _ptrace(_PTRACE_DETACH, self._pid, 0, 0)
+
+            page_addr += page_size
 
     def scan_memory(
         self,
