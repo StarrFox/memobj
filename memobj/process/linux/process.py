@@ -218,7 +218,13 @@ class LinuxProcess(Process):
             raise ValueError(f"No process with pid {pid}")
         return cls(pid)
 
-    def _ptrace_exec(self, shellcode: bytes, *, stack_data: bytes | None = None) -> int:
+    def _ptrace_exec(
+        self,
+        shellcode: bytes,
+        *,
+        stack_data: bytes | None = None,
+        exec_addr: int | None = None,
+    ) -> int:
         """
         Execute shellcode in the target process via ptrace.
 
@@ -227,6 +233,9 @@ class LinuxProcess(Process):
         returns the value of RAX. If stack_data is provided it is written
         below the current RSP and its address is passed as the first
         argument (RDI) via the shellcode's built-in setup.
+
+        If exec_addr is given, the shellcode is placed there; otherwise the
+        first large-enough executable region is chosen automatically.
 
         The caller is responsible for building shellcode that ends with
         ``\\xCC`` (int3).
@@ -247,12 +256,14 @@ class LinuxProcess(Process):
                 stack_addr = (regs.rsp - 512 - len(stack_data)) & ~0xF
                 _poke_bytes(self._pid, stack_addr, stack_data)
 
-            # Find an executable region large enough for the shellcode
-            exec_addr: int | None = None
-            for start, end, perms, _off, _dev, _ino, _path in self._iter_maps():
-                if "x" in perms and (end - start) >= len(shellcode) + 8:
-                    exec_addr = start
-                    break
+            # Find an executable region large enough for the shellcode.
+            # Use the caller-supplied address when provided; otherwise pick the
+            # first region that is large enough.
+            if exec_addr is None:
+                for start, end, perms, _off, _dev, _ino, _path in self._iter_maps():
+                    if "x" in perms and (end - start) >= len(shellcode) + 8:
+                        exec_addr = start
+                        break
 
             if exec_addr is None:
                 raise RuntimeError("No executable region found in target process")
@@ -688,8 +699,23 @@ class LinuxProcess(Process):
                 shellcode += b"\x48\xFF\xC7"                                  # inc rdi
                 shellcode += b"\xC6\x07" + bytes([byte])                      # mov byte [rdi], imm8
         shellcode += b"\xCC"                                                   # int3
+        sc = bytes(shellcode)
 
-        self._ptrace_exec(bytes(shellcode))
+        # _ptrace_exec saves/restores the bytes at its chosen exec region.
+        # If that region overlaps [address, address+len(value)), the restore
+        # would overwrite the bytes we just wrote via in-process stores.
+        # Find the first executable region that does NOT overlap our write.
+        write_end = address + len(value)
+        safe_exec_addr: int | None = None
+        for start, end, perms, *_ in self._iter_maps():
+            if "x" not in perms or end - start < len(sc) + 8:
+                continue
+            if start < write_end and address < end:
+                continue  # overlaps the write destination — skip
+            safe_exec_addr = start
+            break
+
+        self._ptrace_exec(sc, exec_addr=safe_exec_addr)
 
     def scan_memory(
         self,
