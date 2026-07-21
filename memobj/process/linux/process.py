@@ -669,6 +669,13 @@ class LinuxProcess(Process):
         os.waitpid(self._pid, 0)
         try:
             _poke_bytes(self._pid, address, value)
+            # DEBUG: verify the write while the process is still stopped
+            readback = _peek_bytes(self._pid, address, len(value))
+            if readback != value:
+                raise RuntimeError(
+                    f"PTRACE write verification failed at {hex(address)}: "
+                    f"wrote {value.hex()}, got {readback.hex()}"
+                )
         finally:
             _ptrace(_PTRACE_DETACH, self._pid, 0, 0)
 
