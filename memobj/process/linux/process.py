@@ -665,26 +665,29 @@ class LinuxProcess(Process):
         # process write to its own memory via mprotect+store always works.
         page_size = 0x1000
         page_addr = address & ~(page_size - 1)
+        # Cover all pages touched by the write (handle page-crossing writes).
+        last_page = (address + len(value) - 1) & ~(page_size - 1)
+        mprotect_len = last_page - page_addr + page_size
         prot_rwx = _PROT_READ | _PROT_WRITE | _PROT_EXEC
         _MPROTECT_SYSCALL = 10
 
         shellcode = bytearray()
-        shellcode += b"\x48\x83\xE4\xF0"                               # and rsp, ~15
-        # mprotect(page_addr, page_size, PROT_READ|PROT_WRITE|PROT_EXEC)
-        shellcode += b"\x48\xBF" + struct.pack("<Q", page_addr)        # mov rdi, page_addr
-        shellcode += b"\x48\xBE" + struct.pack("<Q", page_size)        # mov rsi, page_size
-        shellcode += b"\x48\xBA" + struct.pack("<Q", prot_rwx)         # mov rdx, prot
+        shellcode += b"\x48\x83\xE4\xF0"                                      # and rsp, ~15
+        # mprotect(page_addr, mprotect_len, PROT_READ|PROT_WRITE|PROT_EXEC)
+        shellcode += b"\x48\xBF" + struct.pack("<Q", page_addr)               # mov rdi, page_addr
+        shellcode += b"\x48\xBE" + struct.pack("<Q", mprotect_len)            # mov rsi, len
+        shellcode += b"\x48\xBA" + struct.pack("<Q", prot_rwx)                # mov rdx, prot
         shellcode += b"\x48\xC7\xC0" + struct.pack("<I", _MPROTECT_SYSCALL)  # mov eax, 10
-        shellcode += b"\x0F\x05"                                        # syscall
+        shellcode += b"\x0F\x05"                                               # syscall
         # Write each byte: keep target address in RDI, increment as we go
-        shellcode += b"\x48\xBF" + struct.pack("<Q", address)          # mov rdi, address
+        shellcode += b"\x48\xBF" + struct.pack("<Q", address)                 # mov rdi, address
         for i, byte in enumerate(value):
             if i == 0:
-                shellcode += b"\xC6\x07" + bytes([byte])               # mov byte [rdi], imm8
+                shellcode += b"\xC6\x07" + bytes([byte])                      # mov byte [rdi], imm8
             else:
-                shellcode += b"\x48\xFF\xC7"                           # inc rdi
-                shellcode += b"\xC6\x07" + bytes([byte])               # mov byte [rdi], imm8
-        shellcode += b"\xCC"                                            # int3
+                shellcode += b"\x48\xFF\xC7"                                  # inc rdi
+                shellcode += b"\xC6\x07" + bytes([byte])                      # mov byte [rdi], imm8
+        shellcode += b"\xCC"                                                   # int3
 
         self._ptrace_exec(bytes(shellcode))
 
