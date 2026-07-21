@@ -138,11 +138,18 @@ def _peek_bytes(pid: int, addr: int, n_bytes: int) -> bytes:
 
 
 def _poke_bytes(pid: int, addr: int, data: bytes) -> None:
-    pad = (-len(data)) % 8
-    padded = data + b"\x00" * pad
-    for i in range(0, len(padded), 8):
-        word = struct.unpack("<Q", padded[i:i + 8])[0]
-        _ptrace_poke(pid, addr + i, word)
+    n = len(data)
+    full_words, remainder = divmod(n, 8)
+    for i in range(full_words):
+        word = struct.unpack("<Q", data[i * 8:(i + 1) * 8])[0]
+        _ptrace_poke(pid, addr + i * 8, word)
+    if remainder:
+        off = full_words * 8
+        existing = _ptrace_peek(pid, addr + off)
+        merged = bytearray(struct.pack("<Q", existing))
+        for j in range(remainder):
+            merged[j] = data[off + j]
+        _ptrace_poke(pid, addr + off, struct.unpack("<Q", bytes(merged))[0])
 
 
 class LinuxProcess(Process):
@@ -263,8 +270,15 @@ class LinuxProcess(Process):
             _ptrace(_PTRACE_SETREGS, self._pid, 0, ctypes.addressof(new_regs))
 
             # Run until int3 (SIGTRAP / signal 5)
+            import signal as _signal
             _ptrace(_PTRACE_CONT, self._pid, 0, 0)
-            os.waitpid(self._pid, 0)
+            _, wstatus = os.waitpid(self._pid, 0)
+
+            if not os.WIFSTOPPED(wstatus) or os.WSTOPSIG(wstatus) != _signal.SIGTRAP:
+                sig = os.WSTOPSIG(wstatus) if os.WIFSTOPPED(wstatus) else -1
+                raise RuntimeError(
+                    f"ptrace shellcode did not hit int3 (got signal {sig})"
+                )
 
             # Read result from RAX
             result_regs = _UserRegsStruct()
