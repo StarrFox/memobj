@@ -281,7 +281,10 @@ class JmpHook(Hook):
 
         bitness = 64 if self.process.process_64_bit else 32
 
-        allocation_size = sum(map(len, hook_instructions))
+        # Encode once at target_address to get the correct byte count.
+        # Instruction.create_* objects return len() == 0, so sum(map(len, ...))
+        # only counts decoded (stolen) instruction bytes and underestimates.
+        allocation_size = len(instructions_to_code(hook_instructions, target_address, bitness=bitness))
         hook_allocation = self.allocate_variable("hook_site", allocation_size, preferred_start=target_address)
         hook_code = instructions_to_code(
             hook_instructions, hook_allocation.address, bitness=bitness

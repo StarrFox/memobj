@@ -24,6 +24,8 @@ _MAP_PRIVATE = 0x2
 _MAP_ANONYMOUS = 0x20
 _MAP_FAILED: int = ctypes.c_size_t(-1).value
 
+_MAP_FIXED = 0x10
+
 _PTRACE_PEEKTEXT = 1
 _PTRACE_POKETEXT = 4
 _PTRACE_CONT = 7
@@ -138,11 +140,18 @@ def _peek_bytes(pid: int, addr: int, n_bytes: int) -> bytes:
 
 
 def _poke_bytes(pid: int, addr: int, data: bytes) -> None:
-    pad = (-len(data)) % 8
-    padded = data + b"\x00" * pad
-    for i in range(0, len(padded), 8):
-        word = struct.unpack("<Q", padded[i:i + 8])[0]
-        _ptrace_poke(pid, addr + i, word)
+    n = len(data)
+    full_words, remainder = divmod(n, 8)
+    for i in range(full_words):
+        word = struct.unpack("<Q", data[i * 8:(i + 1) * 8])[0]
+        _ptrace_poke(pid, addr + i * 8, word)
+    if remainder:
+        off = full_words * 8
+        existing = _ptrace_peek(pid, addr + off)
+        merged = bytearray(struct.pack("<Q", existing))
+        for j in range(remainder):
+            merged[j] = data[off + j]
+        _ptrace_poke(pid, addr + off, struct.unpack("<Q", bytes(merged))[0])
 
 
 class LinuxProcess(Process):
@@ -211,7 +220,13 @@ class LinuxProcess(Process):
             raise ValueError(f"No process with pid {pid}")
         return cls(pid)
 
-    def _ptrace_exec(self, shellcode: bytes, *, stack_data: bytes | None = None) -> int:
+    def _ptrace_exec(
+        self,
+        shellcode: bytes,
+        *,
+        stack_data: bytes | None = None,
+        exec_addr: int | None = None,
+    ) -> int:
         """
         Execute shellcode in the target process via ptrace.
 
@@ -220,6 +235,9 @@ class LinuxProcess(Process):
         returns the value of RAX. If stack_data is provided it is written
         below the current RSP and its address is passed as the first
         argument (RDI) via the shellcode's built-in setup.
+
+        If exec_addr is given, the shellcode is placed there; otherwise the
+        first large-enough executable region is chosen automatically.
 
         The caller is responsible for building shellcode that ends with
         ``\\xCC`` (int3).
@@ -240,12 +258,14 @@ class LinuxProcess(Process):
                 stack_addr = (regs.rsp - 512 - len(stack_data)) & ~0xF
                 _poke_bytes(self._pid, stack_addr, stack_data)
 
-            # Find an executable region large enough for the shellcode
-            exec_addr: int | None = None
-            for start, end, perms, _off, _dev, _ino, _path in self._iter_maps():
-                if "x" in perms and (end - start) >= len(shellcode) + 8:
-                    exec_addr = start
-                    break
+            # Find an executable region large enough for the shellcode.
+            # Use the caller-supplied address when provided; otherwise pick the
+            # first region that is large enough.
+            if exec_addr is None:
+                for start, end, perms, _off, _dev, _ino, _path in self._iter_maps():
+                    if "x" in perms and (end - start) >= len(shellcode) + 8:
+                        exec_addr = start
+                        break
 
             if exec_addr is None:
                 raise RuntimeError("No executable region found in target process")
@@ -263,8 +283,15 @@ class LinuxProcess(Process):
             _ptrace(_PTRACE_SETREGS, self._pid, 0, ctypes.addressof(new_regs))
 
             # Run until int3 (SIGTRAP / signal 5)
+            import signal as _signal
             _ptrace(_PTRACE_CONT, self._pid, 0, 0)
-            os.waitpid(self._pid, 0)
+            _, wstatus = os.waitpid(self._pid, 0)
+
+            if not os.WIFSTOPPED(wstatus) or os.WSTOPSIG(wstatus) != _signal.SIGTRAP:
+                sig = os.WSTOPSIG(wstatus) if os.WIFSTOPPED(wstatus) else -1
+                raise RuntimeError(
+                    f"ptrace shellcode did not hit int3 (got signal {sig})"
+                )
 
             # Read result from RAX
             result_regs = _UserRegsStruct()
@@ -644,32 +671,122 @@ class LinuxProcess(Process):
         if self._pid == os.getpid():
             ctypes.memmove(address, value, len(value))
             return
-
-        # Try /proc/pid/mem first (works for rw/rwx pages without ptrace overhead)
-        try:
-            fd = os.open(f"/proc/{self._pid}/mem", os.O_WRONLY)
-            try:
-                written = os.pwrite(fd, value, address)
-            finally:
-                os.close(fd)
-            if written != len(value):
-                raise OSError(
-                    f"Short write at {hex(address)}: wrote {written} of {len(value)}"
-                )
+        if not value:
             return
-        except OSError:
-            pass
 
-        # Fall back to PTRACE_POKETEXT for r-xp pages (e.g. patching text section)
-        ret = _ptrace(_PTRACE_ATTACH, self._pid)
-        if ret < 0:
-            err = ctypes.get_errno()
-            raise OSError(err, os.strerror(err), "PTRACE_ATTACH failed")
-        os.waitpid(self._pid, 0)
-        try:
-            _poke_bytes(self._pid, address, value)
-        finally:
-            _ptrace(_PTRACE_DETACH, self._pid, 0, 0)
+        # On GitHub Actions (Ubuntu 24.04 / Azure KVM), writes to file-backed
+        # r-xp code pages via PTRACE_POKETEXT or in-process stores do not
+        # persist: they appear to succeed but the underlying physical page is
+        # never modified (hypervisor-level W^X enforcement).
+        #
+        # Strategy: for each 4 KB page touched by the write:
+        # 1. Read the current page content via PTRACE_PEEKTEXT.
+        # 2. Patch our bytes into the copy.
+        # 3. Run a shellcode that calls mmap(page, 4096, RWX,
+        #    MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0), atomically replacing
+        #    the (possibly file-backed) page with a fresh anonymous page.
+        # 4. Write the patched content back via PTRACE_POKETEXT — anonymous
+        #    pages are not subject to the W^X barrier and always accept writes.
+        page_size = 0x1000
+
+        first_page = address & ~(page_size - 1)
+        last_page  = (address + len(value) - 1) & ~(page_size - 1)
+        page_addr  = first_page
+
+        import signal as _signal
+
+        while page_addr <= last_page:
+            chunk_start  = max(address, page_addr)
+            chunk_end    = min(address + len(value), page_addr + page_size)
+            page_offset  = chunk_start - page_addr
+            value_offset = chunk_start - address
+            chunk_len    = chunk_end - chunk_start
+
+            ret = _ptrace(_PTRACE_ATTACH, self._pid)
+            if ret < 0:
+                err = ctypes.get_errno()
+                raise OSError(err, os.strerror(err), "PTRACE_ATTACH failed")
+            os.waitpid(self._pid, 0)
+
+            try:
+                regs = _UserRegsStruct()
+                _ptrace(_PTRACE_GETREGS, self._pid, 0, ctypes.addressof(regs))
+
+                # Save the full page so surrounding bytes are preserved after
+                # MAP_FIXED zeroes it out.
+                original_page = _peek_bytes(self._pid, page_addr, page_size)
+                patched_page  = bytearray(original_page)
+                patched_page[page_offset:page_offset + chunk_len] = (
+                    value[value_offset:value_offset + chunk_len]
+                )
+
+                # Shellcode: mmap(page_addr, page_size, RWX,
+                #                 MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0)
+                mmap_flags = _MAP_PRIVATE | _MAP_ANONYMOUS | _MAP_FIXED
+                shellcode = (
+                    b"\x48\x83\xE4\xF0" +
+                    b"\x48\xBF" + struct.pack("<Q", page_addr) +
+                    b"\x48\xBE" + struct.pack("<Q", page_size) +
+                    b"\x48\xBA" + struct.pack("<Q", _PROT_READ | _PROT_WRITE | _PROT_EXEC) +
+                    b"\x49\xBA" + struct.pack("<Q", mmap_flags) +
+                    b"\x49\xB8" + struct.pack("<Q", 0xFFFFFFFF_FFFFFFFF) +
+                    b"\x49\xB9" + struct.pack("<Q", 0) +
+                    b"\x48\xC7\xC0" + struct.pack("<I", _MMAP_SYSCALL) +
+                    b"\x0F\x05" +
+                    b"\xCC"
+                )
+
+                # Pick exec_addr from a page that is NOT the one we're replacing.
+                exec_addr: int | None = None
+                for start, end, perms, *_ in self._iter_maps():
+                    if "x" not in perms or end - start < len(shellcode) + 8:
+                        continue
+                    if (start & ~(page_size - 1)) == page_addr:
+                        continue
+                    exec_addr = start
+                    break
+
+                if exec_addr is None:
+                    raise RuntimeError(
+                        f"No exec region for write_memory shellcode (page {hex(page_addr)})"
+                    )
+
+                orig_exec = _peek_bytes(self._pid, exec_addr, len(shellcode))
+                _poke_bytes(self._pid, exec_addr, shellcode)
+
+                new_regs = _UserRegsStruct.from_buffer_copy(bytearray(regs))
+                new_regs.rip = exec_addr
+                new_regs.orig_rax = 0xFFFFFFFF_FFFFFFFF
+                _ptrace(_PTRACE_SETREGS, self._pid, 0, ctypes.addressof(new_regs))
+
+                _ptrace(_PTRACE_CONT, self._pid, 0, 0)
+                _, wstatus = os.waitpid(self._pid, 0)
+
+                if not os.WIFSTOPPED(wstatus) or os.WSTOPSIG(wstatus) != _signal.SIGTRAP:
+                    sig = os.WSTOPSIG(wstatus) if os.WIFSTOPPED(wstatus) else -1
+                    raise RuntimeError(
+                        f"MAP_FIXED mmap shellcode got signal {sig} (expected SIGTRAP)"
+                    )
+
+                result_regs = _UserRegsStruct()
+                _ptrace(_PTRACE_GETREGS, self._pid, 0, ctypes.addressof(result_regs))
+                if result_regs.rax != page_addr:
+                    raise RuntimeError(
+                        f"MAP_FIXED mmap at {hex(page_addr)} failed: rax={hex(result_regs.rax)}"
+                    )
+
+                # page_addr is now a fresh anonymous RWX page (zeroed).
+                # PTRACE_POKETEXT to anonymous pages is reliable — write patched content.
+                _poke_bytes(self._pid, page_addr, bytes(patched_page))
+
+                # Restore exec_addr and CPU registers before detaching.
+                _poke_bytes(self._pid, exec_addr, orig_exec)
+                _ptrace(_PTRACE_SETREGS, self._pid, 0, ctypes.addressof(regs))
+
+            finally:
+                _ptrace(_PTRACE_DETACH, self._pid, 0, 0)
+
+            page_addr += page_size
 
     def scan_memory(
         self,

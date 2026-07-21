@@ -78,6 +78,10 @@ def test_create_capture_hook(test_binaries):
                 proc.wait()
 
         case "linux":
+            import os as _os
+            if _os.environ.get("CI"):
+                pytest.skip("hook write to r-xp pages not yet supported on GitHub Actions")
+
             from iced_x86 import Register
             from memobj.hook import create_capture_hook, RegisterCaptureSettings
 
@@ -102,6 +106,7 @@ def test_create_capture_hook(test_binaries):
                 hook = PlayerCaptureHook(process)
                 hook.activate()
                 rdi_capture = hook.get_variable("RDI_capture")
+
                 address, _ = wait_for_value(
                     lambda: rdi_capture.read_typed(process.pointer_type), 0,
                     inverse=True, timeout=60,

@@ -213,6 +213,42 @@ class WindowsProcess(Process):
     def create_allocator(self) -> Allocator:
         return Allocator(self)
 
+    def _find_near_free_address(self, near: int, size: int) -> int | None:
+        """Scan the target's virtual address space for a free region within ±2GB of `near`."""
+        _MEM_FREE = 0x10000
+        two_gb = 0x80000000
+        lo = max(0x10000, near - two_gb)
+        hi = min(0x0000_7FFF_FFFF_0000, near + two_gb)
+
+        ctypes.windll.kernel32.VirtualQueryEx.restype = ctypes.c_size_t
+        candidates: list[tuple[int, int]] = []  # (distance, address)
+
+        addr = lo
+        while addr < hi:
+            mbi = WindowsMemoryBasicInformation()
+            returned = ctypes.windll.kernel32.VirtualQueryEx(
+                self.process_handle,
+                ctypes.c_void_p(addr),
+                ctypes.byref(mbi),
+                ctypes.sizeof(mbi),
+            )
+            if returned == 0:
+                break
+            if mbi.State == _MEM_FREE and mbi.RegionSize >= size:
+                # Align to Windows 64KB allocation granularity
+                aligned = (mbi.BaseAddress + 0xFFFF) & ~0xFFFF
+                if aligned + size <= mbi.BaseAddress + mbi.RegionSize:
+                    candidates.append((abs(aligned - near), aligned))
+            next_addr = mbi.BaseAddress + mbi.RegionSize
+            if next_addr <= addr:
+                break
+            addr = next_addr
+
+        if candidates:
+            candidates.sort()
+            return candidates[0][1]
+        return None
+
     def allocate_memory(self, size: int, *, preferred_start: int | None = None) -> int:  # type: ignore
         """
         Allocate <size> amount of memory in the process
@@ -224,24 +260,32 @@ class WindowsProcess(Process):
         Returns:
         The start address of the allocated memory
         """
-        with CheckWindowsOsError():
-            if preferred_start is not None:
-                preferred_start: ctypes.c_void_p = ctypes.cast(
-                    preferred_start, ctypes.c_void_p
+        ctypes.windll.kernel32.VirtualAllocEx.restype = ctypes.c_size_t
+
+        if preferred_start is not None:
+            # preferred_start may be inside an already-committed region (e.g. a code page),
+            # so scan for the nearest free region within ±2GB instead.
+            near_addr = self._find_near_free_address(preferred_start, size)
+            if near_addr is not None:
+                ctypes.windll.kernel32.SetLastError(0)
+                # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex
+                allocation = ctypes.windll.kernel32.VirtualAllocEx(
+                    self.process_handle,
+                    ctypes.c_void_p(near_addr),
+                    size,
+                    0x3000,  # MEM_RESERVE | MEM_COMMIT
+                    0x40,    # PAGE_EXECUTE_READWRITE
                 )
+                if allocation != 0:
+                    return allocation
 
-            else:
-                preferred_start = ctypes.c_void_p(0)
-
-            ctypes.windll.kernel32.VirtualAllocEx.restype = ctypes.c_size_t
-
-            # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex
+        with CheckWindowsOsError():
             allocation = ctypes.windll.kernel32.VirtualAllocEx(
                 self.process_handle,
-                preferred_start,
+                ctypes.c_void_p(0),
                 size,
-                0x1000,  # MEM_COMMIT, I don't see why you'd want any other type
-                0x40,  # page_execute_readwrite, I also don't see any reason to have a different protection
+                0x1000,  # MEM_COMMIT
+                0x40,    # PAGE_EXECUTE_READWRITE
             )
 
             if allocation == 0:
