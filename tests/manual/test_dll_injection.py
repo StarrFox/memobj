@@ -86,17 +86,8 @@ def test_create_capture_hook(test_binaries):
                 process = memobj.LinuxProcess.from_id(proc.pid)
                 module_name = exe_path.name  # "inject_target"
 
-                module = process.get_module_named(module_name)
-                symbols = module.get_symbols()
-                uses_player_addr: int | None = symbols.get("uses_player")
-                print(f"\n[diag] module base_address: {hex(module.base_address)}")
-                print(f"[diag] uses_player nm addr: {hex(uses_player_addr) if uses_player_addr else None}")
-
-                raw_pattern_bytes = _get_uses_player_pattern(process, module_name)
-                print(f"[diag] uses_player first 32 bytes: {raw_pattern_bytes.hex()}")
-
                 pattern = regex.compile(
-                    regex.escape(raw_pattern_bytes),
+                    regex.escape(_get_uses_player_pattern(process, module_name)),
                     regex.DOTALL,
                 )
 
@@ -111,32 +102,10 @@ def test_create_capture_hook(test_binaries):
                 hook = PlayerCaptureHook(process)
                 hook.activate()
                 rdi_capture = hook.get_variable("RDI_capture")
-                hook_site = hook.get_variable("hook_site")
-
-                print(f"[diag] hook_site addr: {hex(hook_site.address)}")
-                print(f"[diag] rdi_capture addr: {hex(rdi_capture.address)}")
-
-                # Verify entry jump was written (first byte should be 0x50 = push rax)
-                assert uses_player_addr is not None
-                entry_bytes = process.read_memory(uses_player_addr, 14)
-                print(f"[diag] bytes at uses_player after hook: {entry_bytes.hex()}")
-
-                # Verify hook body was written (first byte should be 0x58 = pop rax)
-                hook_body_bytes = process.read_memory(hook_site.address, 16)
-                print(f"[diag] hook body first 16 bytes: {hook_body_bytes.hex()}")
-
-                import time as _time
-                for i in range(120):
-                    val = rdi_capture.read_typed(process.pointer_type)
-                    if i < 5 or i % 20 == 0:
-                        print(f"[diag] poll {i}: rdi_capture={hex(val)}")
-                    if val != 0:
-                        address = val
-                        break
-                    _time.sleep(0.5)
-                else:
-                    print(f"[diag] final rdi_capture value: {hex(rdi_capture.read_typed(process.pointer_type))}")
-                    raise TimeoutError("ran out of time waiting for value 0")
+                address, _ = wait_for_value(
+                    lambda: rdi_capture.read_typed(process.pointer_type), 0,
+                    inverse=True, timeout=60,
+                )
                 assert address != 0
             finally:
                 proc.terminate()

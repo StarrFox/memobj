@@ -659,22 +659,9 @@ class LinuxProcess(Process):
             ctypes.memmove(address, value, len(value))
             return
 
-        # Try /proc/pid/mem first (works for rw/rwx pages without ptrace overhead)
-        try:
-            fd = os.open(f"/proc/{self._pid}/mem", os.O_WRONLY)
-            try:
-                written = os.pwrite(fd, value, address)
-            finally:
-                os.close(fd)
-            if written != len(value):
-                raise OSError(
-                    f"Short write at {hex(address)}: wrote {written} of {len(value)}"
-                )
-            return
-        except OSError:
-            pass
-
-        # Fall back to PTRACE_POKETEXT for r-xp pages (e.g. patching text section)
+        # Always use PTRACE_POKETEXT for remote writes. /proc/pid/mem pwrite may
+        # return success on r-xp pages without actually writing on some kernels
+        # (e.g. GitHub Actions Ubuntu), so ptrace is the only reliable path.
         ret = _ptrace(_PTRACE_ATTACH, self._pid)
         if ret < 0:
             err = ctypes.get_errno()
