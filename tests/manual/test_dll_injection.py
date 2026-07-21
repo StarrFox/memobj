@@ -102,16 +102,6 @@ def test_create_capture_hook(test_binaries):
                 hook = PlayerCaptureHook(process)
                 hook.activate()
                 rdi_capture = hook.get_variable("RDI_capture")
-                hook_site = hook.get_variable("hook_site")
-
-                module = process.get_module_named(module_name)
-                uses_player_addr = module.get_symbols().get("uses_player")
-                assert uses_player_addr is not None
-                entry_bytes = process.read_memory(uses_player_addr, 14)
-                hook_body = process.read_memory(hook_site.address, 16)
-                print(f"\n[diag] uses_player bytes after hook: {entry_bytes.hex()}")
-                print(f"[diag] hook body first 16: {hook_body.hex()}")
-                print(f"[diag] rdi_capture addr: {hex(rdi_capture.address)}")
 
                 address, _ = wait_for_value(
                     lambda: rdi_capture.read_typed(process.pointer_type), 0,
